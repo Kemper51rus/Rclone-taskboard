@@ -145,6 +145,17 @@ cp hybrid/.env.systemd.example hybrid/.env
 systemctl enable --now rclone-hybrid-web.service
 ```
 
+#### Переход со старого external watcher
+
+Если раньше использовался отдельный `rclone-watch-hybrid.service`, после обновления достаточно один раз выполнить:
+
+```bash
+/opt/rclone-hybrid/scripts/migrate-embedded-watcher-systemd.sh /opt/rclone-hybrid
+systemctl restart rclone-hybrid-web.service
+```
+
+Скрипт остановит и отключит старый watcher-service, удалит устаревший unit-файл при наличии и оставит только встроенный watcher внутри backend.
+
 ---
 
 ## 🚀 Usage
