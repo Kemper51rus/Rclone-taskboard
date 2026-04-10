@@ -82,4 +82,4 @@ backend/app/jobs/default_jobs.example.json
 ## 📘 Связанные документы
 
 - [Руководство по развертыванию](/root/projects/rclone-web-ui/rclone/docs/07-deployment.md)
-- [Руководство по миграции с legacy](/root/projects/rclone-web-ui/rclone/docs/08-legacy-migration.md)
+- [Архивные материалы по legacy](/root/projects/rclone-web-ui/rclone/legacy/README.md)

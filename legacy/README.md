@@ -19,7 +19,7 @@ Legacy stack обычно включал:
 ## 🛠️ Migration Command
 
 ```bash
-./scripts/migrate-legacy-to-hybrid.sh <systemd|docker> [target-root]
+./legacy/migrate-legacy-to-hybrid.sh <systemd|docker> [target-root]
 ```
 
 ### Аргументы
@@ -61,13 +61,13 @@ Legacy stack обычно включал:
 ### Миграция в Systemd
 
 ```bash
-sudo ./scripts/migrate-legacy-to-hybrid.sh systemd /opt/rclone-hybrid
+sudo ./legacy/migrate-legacy-to-hybrid.sh systemd /opt/rclone-hybrid
 ```
 
 ### Миграция в Docker
 
 ```bash
-sudo ./scripts/migrate-legacy-to-hybrid.sh docker /opt/rclone-hybrid
+sudo ./legacy/migrate-legacy-to-hybrid.sh docker /opt/rclone-hybrid
 ```
 
 ---

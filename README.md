@@ -16,7 +16,6 @@
 - [⚙️ Configuration](#️-configuration)
 - [📖 API](#-api)
 - [🧪 Examples](#-examples)
-- [🔄 Миграция с legacy](#-миграция-с-legacy)
 - [❓ FAQ](#-faq)
 - [📘 Документация](#-документация)
 
@@ -78,6 +77,7 @@
 │   ├── .env.docker.example
 │   ├── .env.systemd.example
 │   └── docker-compose.yml
+├── legacy/
 ├── scripts/
 ├── systemd/
 └── README.md
@@ -91,8 +91,9 @@
 | `hybrid/backend/app/jobs/default_jobs.example.json` | Шаблон каталога задач |
 | `hybrid/backend/app/jobs/default_jobs.json` | Рабочий каталог задач, создаётся при первом запуске |
 | `hybrid/docker-compose.yml` | Docker-стек |
+| `legacy/` | Отдельные материалы и скрипты для старого окружения |
 | `systemd/` | Unit-файлы для запуска на хосте |
-| `scripts/` | Скрипты установки и миграции |
+| `scripts/` | Скрипты установки |
 
 ---
 
@@ -337,59 +338,6 @@ curl -X POST http://127.0.0.1:8080/api/triggers/event \
 ./scripts/install-hybrid-systemd.sh /opt/rclone-hybrid
 ```
 
----
-
-## 🔄 Миграция с legacy
-
-Старый runtime обычно включал:
-
-- `rclone-backup.service`
-- `rclone-backup.timer`
-- `rclone-watch.service`
-- `rclone-web.service`
-- shell-скрипты в `/usr/local/bin`
-
-Для миграции используется:
-
-```bash
-./scripts/migrate-legacy-to-hybrid.sh <systemd|docker> [target-root]
-```
-
-### Что делает скрипт миграции
-
-1. Сохраняет снимок старого окружения.
-2. Экспортирует unit-файлы и вывод `systemctl status`.
-3. Копирует полезные артефакты старого запуска в backup-каталог.
-4. Останавливает и отключает старые unit-ы.
-5. Разворачивает новый hybrid runtime в выбранном режиме.
-
-### Что попадает в backup snapshot
-
-- `systemctl cat` для legacy units
-- `systemctl status` для legacy units
-- `/usr/local/bin/rclone-backup.sh`
-- `/usr/local/bin/rclone-backup-status.sh`
-- `/usr/local/bin/rclone-watch.sh`
-- `/etc/rclone-backup.gotify`
-- `/var/lib/rclone-backup`
-- `/var/log/rclone-backup.log`
-
-### Примеры
-
-#### Миграция в systemd
-
-```bash
-sudo ./scripts/migrate-legacy-to-hybrid.sh systemd /opt/rclone-hybrid
-```
-
-#### Миграция в docker
-
-```bash
-sudo ./scripts/migrate-legacy-to-hybrid.sh docker /opt/rclone-hybrid
-```
-
----
-
 ## ❓ FAQ
 
 ### Пройдёт ли чистый запуск без `default_jobs.json`?
@@ -424,6 +372,6 @@ sudo ./scripts/migrate-legacy-to-hybrid.sh docker /opt/rclone-hybrid
 - `docs/04-api-reference.md` — полное описание API
 - `docs/06-hybrid-mvp.md` — структура каталога и настройки
 - `docs/07-deployment.md` — развертывание
-- `docs/08-legacy-migration.md` — переход со старого runtime
 - `hybrid/README.md` — заметки по каталогу `hybrid/`
+- `legacy/README.md` — отдельные материалы по старому окружению и миграции
 - `Security.md` — локальные заметки по безопасности, файл игнорируется Git

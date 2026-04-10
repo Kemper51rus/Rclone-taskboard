@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 MODE="${1:-}"
 TARGET_ROOT="${2:-/opt/rclone-hybrid}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
@@ -70,12 +71,12 @@ done
 
 case "$MODE" in
   systemd)
-    "$SCRIPT_DIR/install-hybrid-systemd.sh" "$TARGET_ROOT"
+    "$ROOT_DIR/scripts/install-hybrid-systemd.sh" "$TARGET_ROOT"
     systemctl enable --now rclone-hybrid-web.service
     systemctl enable --now rclone-watch-hybrid.service
     ;;
   docker)
-    "$SCRIPT_DIR/install-hybrid-docker.sh" "$TARGET_ROOT"
+    "$ROOT_DIR/scripts/install-hybrid-docker.sh" "$TARGET_ROOT"
     ;;
 esac
 
