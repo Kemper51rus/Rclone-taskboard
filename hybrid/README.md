@@ -1,6 +1,6 @@
 # 📦 Hybrid Runtime
 
-Каталог `hybrid/` содержит приложение, deployment templates и packaging assets.
+Каталог `hybrid/` содержит приложение, шаблоны окружения и файлы для развертывания.
 
 ---
 
@@ -11,16 +11,16 @@
 | `backend/app/main.py` | FastAPI entrypoint |
 | `backend/app/orchestrator.py` | Scheduler, queues, workers |
 | `backend/app/storage.py` | SQLite persistence |
-| `backend/app/jobs/default_jobs.example.json` | Безопасный шаблон runtime catalog |
-| `.env.docker.example` | Docker env template |
-| `.env.systemd.example` | Systemd env template |
-| `docker-compose.yml` | Docker deployment stack |
+| `backend/app/jobs/default_jobs.example.json` | Шаблон рабочего каталога |
+| `.env.docker.example` | Шаблон env для Docker |
+| `.env.systemd.example` | Шаблон env для systemd |
+| `docker-compose.yml` | Docker-стек |
 
 ---
 
 ## 🚀 Bootstrap
 
-При чистом старте runtime создаёт:
+При чистом старте приложение создаёт:
 
 ```text
 backend/app/jobs/default_jobs.json
@@ -50,15 +50,32 @@ backend/app/jobs/default_jobs.example.json
 
 ## 📖 API Surface
 
+- `GET /`
 - `GET /api/health`
 - `GET /api/state`
 - `GET /api/jobs`
+- `GET /api/gotify`
+- `GET /api/queues`
+- `GET /api/bandwidth`
+- `GET /api/logging`
+- `GET /api/logging/rclone-tail`
+- `GET /api/clouds`
+- `GET /api/fs/browse`
 - `GET /api/runs`
 - `GET /api/runs/{run_id}`
+- `PUT /api/gotify`
+- `PUT /api/queues`
+- `PUT /api/bandwidth`
+- `PUT /api/logging`
+- `DELETE /api/logging/rclone-log`
 - `POST /api/runs`
 - `POST /api/runs/job/{job_key}`
+- `POST /api/run-steps/{step_id}/control`
 - `POST /api/triggers/event`
 - `PUT /api/backups`
+- `PUT /api/jobs`
+
+Подробное описание находится в `docs/04-api-reference.md`.
 
 ---
 

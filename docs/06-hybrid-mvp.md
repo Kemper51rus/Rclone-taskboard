@@ -1,6 +1,6 @@
 # ⚙️ Configuration
 
-Этот документ описывает runtime catalog, env-переменные и рекомендуемую модель работы с секретами.
+Этот документ описывает рабочий каталог задач и основные переменные окружения.
 
 ---
 
@@ -10,8 +10,8 @@
 
 | Файл | Роль |
 | --- | --- |
-| `hybrid/backend/app/jobs/default_jobs.example.json` | Безопасный шаблон, хранится в Git |
-| `hybrid/backend/app/jobs/default_jobs.json` | Runtime catalog, создаётся из шаблона |
+| `hybrid/backend/app/jobs/default_jobs.example.json` | Шаблон каталога, хранится в Git |
+| `hybrid/backend/app/jobs/default_jobs.json` | Рабочий каталог, создаётся из шаблона |
 
 ### Основные секции
 
@@ -20,6 +20,8 @@ Catalog содержит:
 - `profiles`
 - `gotify`
 - `queues`
+- `bandwidth`
+- `logging`
 - `clouds`
 - `jobs`
 
@@ -44,6 +46,8 @@ Catalog содержит:
 - параллельное выполнение профилей
 - queueing для scheduler
 - queueing для watcher
+- число workers в каждой очереди
+- отдельные лимиты скорости для очередей
 
 ### Clouds
 
@@ -58,13 +62,13 @@ Catalog содержит:
 
 ## 🚀 Bootstrap Behavior
 
-Если runtime catalog отсутствует, приложение автоматически создаёт его по схеме:
+Если рабочий каталог отсутствует, приложение автоматически создаёт его по схеме:
 
 ```text
 default_jobs.example.json -> default_jobs.json
 ```
 
-Это позволяет не хранить environment-specific runtime данные в репозитории.
+Это упрощает первый запуск и не требует заранее готовить рабочий JSON-файл.
 
 ---
 
@@ -73,9 +77,9 @@ default_jobs.example.json -> default_jobs.json
 | Переменная | Назначение |
 | --- | --- |
 | `HYBRID_APP_NAME` | Публичное имя приложения |
-| `APP_ROOT` | Корневой runtime path |
+| `APP_ROOT` | Корневой рабочий каталог |
 | `HYBRID_DB_PATH` | Путь к SQLite |
-| `HYBRID_JOBS_FILE` | Путь к runtime catalog |
+| `HYBRID_JOBS_FILE` | Путь к рабочему каталогу |
 | `HYBRID_RCLONE_CONFIG` | Путь к `rclone.conf` |
 | `APP_TIMEZONE` | Таймзона приложения |
 | `HYBRID_ENABLE_SCHEDULER` | Включение scheduler |
@@ -93,19 +97,7 @@ default_jobs.example.json -> default_jobs.json
 ## 🔄 Что сделать после bootstrap
 
 1. Проверить сгенерированный `default_jobs.json`
-2. Импортировать или настроить cloud settings из `rclone.conf`
+2. Проверить, что список облаков корректно читается из `rclone.conf`
 3. Проверить destination paths и schedules
 4. Проверить retention policies
-5. Включить защиту API при необходимости
-
----
-
-## 🔐 Secret Management
-
-Рекомендуемый подход:
-
-- хранить `default_jobs.example.json` в Git
-- не хранить `default_jobs.json` в Git
-- не хранить `hybrid/.env` в Git
-- хранить cloud credentials в `rclone.conf` или другом внешнем secret source
-- не коммитить access tokens, refresh tokens и runtime cloud metadata
+5. Проверить настройки очередей, логирования и лимитов скорости

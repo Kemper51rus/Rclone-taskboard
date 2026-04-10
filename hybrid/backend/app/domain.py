@@ -8,8 +8,8 @@ from typing import Any
 
 VALID_TRANSFER_MODES = {"copy", "sync"}
 VALID_JOB_KINDS = {"backup", "command"}
-VALID_JOB_PROFILES = {"standard", "heavy"}
 VALID_SCHEDULE_MODES = {"manual", "interval", "daily", "weekly"}
+DISABLED_BWLIMIT_VALUES = {"off", "none", "unlimited", "disabled", "0", "0b", "0k", "0m", "0g"}
 
 DEFAULT_RCLONE_ARGS = [
     "--contimeout",
@@ -27,10 +27,8 @@ DEFAULT_RCLONE_ARGS = [
     "--checkers",
     "8",
     "--stats",
-    "30s",
+    "10s",
     "--stats-one-line",
-    "--log-file",
-    "/var/log/rclone-backup.log",
     "--log-level",
     "INFO",
 ]
@@ -185,16 +183,89 @@ class GotifySettings:
 
 
 @dataclass(frozen=True)
+class QueueDefinition:
+    key: str
+    title: str | None = None
+    workers: int = 1
+    bandwidth_limit: str | None = None
+    enabled: bool = True
+
+    def normalized(self) -> QueueDefinition:
+        key = str(self.key or "").strip() or "standard"
+        title = str(self.title or "").strip() or key
+        workers = max(1, int(self.workers or 1))
+        return QueueDefinition(
+            key=key,
+            title=title,
+            workers=workers,
+            bandwidth_limit=normalize_bwlimit(self.bandwidth_limit),
+            enabled=bool(self.enabled),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self.normalized())
+
+
+DEFAULT_QUEUE_DEFINITIONS = [
+    QueueDefinition(key="standard", title="standard", workers=1, enabled=True),
+    QueueDefinition(key="heavy", title="heavy", workers=1, enabled=True),
+]
+
+
+@dataclass(frozen=True)
 class QueueSettings:
     allow_parallel_profiles: bool = False
     allow_scheduler_queueing: bool = False
     allow_event_queueing: bool = False
+    definitions: list[QueueDefinition] = field(default_factory=list)
 
     def normalized(self) -> QueueSettings:
+        normalized_definitions: list[QueueDefinition] = []
+        seen_keys: set[str] = set()
+        for definition in self.definitions or []:
+            normalized = definition.normalized()
+            if not normalized.key or normalized.key in seen_keys:
+                continue
+            seen_keys.add(normalized.key)
+            normalized_definitions.append(normalized)
+        if not normalized_definitions:
+            normalized_definitions = [definition.normalized() for definition in DEFAULT_QUEUE_DEFINITIONS]
         return QueueSettings(
             allow_parallel_profiles=bool(self.allow_parallel_profiles),
             allow_scheduler_queueing=bool(self.allow_scheduler_queueing),
             allow_event_queueing=bool(self.allow_event_queueing),
+            definitions=normalized_definitions,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self.normalized())
+
+    def queue_keys(self) -> list[str]:
+        return [definition.key for definition in self.normalized().definitions if definition.enabled]
+
+
+@dataclass(frozen=True)
+class BandwidthSettings:
+    limit: str | None = None
+
+    def normalized(self) -> BandwidthSettings:
+        raw_limit = str(self.limit or "").strip()
+        normalized_limit = raw_limit or None
+        if normalized_limit and normalized_limit.lower() in DISABLED_BWLIMIT_VALUES:
+            normalized_limit = None
+        return BandwidthSettings(limit=normalized_limit)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self.normalized())
+
+
+@dataclass(frozen=True)
+class LoggingSettings:
+    rclone_log_enabled: bool = False
+
+    def normalized(self) -> LoggingSettings:
+        return LoggingSettings(
+            rclone_log_enabled=bool(self.rclone_log_enabled),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -292,7 +363,7 @@ class JobDefinition:
     def validate(self) -> JobDefinition:
         raw_key = self.key.strip()
         kind = self.kind if self.kind in VALID_JOB_KINDS else "command"
-        profile = self.profile if self.profile in VALID_JOB_PROFILES else "standard"
+        profile = (self.profile or "").strip() or "standard"
         transfer_mode = self.transfer_mode if self.transfer_mode in VALID_TRANSFER_MODES else "copy"
         source_path = (self.source_path or "").strip() or None
         cloud_key = (self.cloud_key or "").strip() or None
@@ -350,8 +421,9 @@ class JobDefinition:
         source_path: str,
         destination_path: str,
         options: BackupOptions,
+        bandwidth_limit: str | None = None,
     ) -> list[str]:
-        return [
+        command = [
             "rclone",
             transfer_mode,
             source_path,
@@ -359,20 +431,23 @@ class JobDefinition:
             *options.to_args(),
             *DEFAULT_RCLONE_ARGS,
         ]
+        return apply_rclone_bwlimit(command, bandwidth_limit)
 
     @staticmethod
     def build_retention_command(
         destination_path: str,
         retention: RetentionSettings,
+        bandwidth_limit: str | None = None,
     ) -> list[str]:
         normalized = retention.normalized()
-        return [
+        command = [
             "rclone",
             "delete",
             destination_path,
             *normalized.to_args(),
             *DEFAULT_RCLONE_ARGS,
         ]
+        return apply_rclone_bwlimit(command, bandwidth_limit)
 
 
 @dataclass(frozen=True)
@@ -392,15 +467,28 @@ class JobCatalog:
         profiles: dict[str, list[str]],
         gotify: GotifySettings | None = None,
         queues: QueueSettings | None = None,
+        bandwidth: BandwidthSettings | None = None,
+        logging: LoggingSettings | None = None,
         clouds: list[CloudSettings] | None = None,
     ) -> None:
         self._lock = threading.RLock()
         self._jobs_by_key: dict[str, JobDefinition] = {}
         self._clouds_by_key: dict[str, CloudSettings] = {}
+        self._queue_definitions_by_key: dict[str, QueueDefinition] = {}
         self.profiles: dict[str, list[str]] = {}
         self.gotify = (gotify or GotifySettings()).normalized()
         self.queues = (queues or QueueSettings()).normalized()
-        self.replace(jobs=jobs, profiles=profiles, gotify=gotify, queues=queues, clouds=clouds)
+        self.bandwidth = (bandwidth or BandwidthSettings()).normalized()
+        self.logging = (logging or LoggingSettings()).normalized()
+        self.replace(
+            jobs=jobs,
+            profiles=profiles,
+            gotify=gotify,
+            queues=queues,
+            bandwidth=bandwidth,
+            logging=logging,
+            clouds=clouds,
+        )
 
     def replace(
         self,
@@ -408,6 +496,8 @@ class JobCatalog:
         profiles: dict[str, list[str]],
         gotify: GotifySettings | None = None,
         queues: QueueSettings | None = None,
+        bandwidth: BandwidthSettings | None = None,
+        logging: LoggingSettings | None = None,
         clouds: list[CloudSettings] | None = None,
     ) -> None:
         normalized_jobs = {job.key: job.validate() for job in jobs}
@@ -417,12 +507,20 @@ class JobCatalog:
             if cloud.key
         }
         normalized_profiles = {name: list(keys) for name, keys in profiles.items()}
+        normalized_queue_definitions = {
+            definition.key: definition
+            for definition in (queues or self.queues).normalized().definitions
+            if definition.key
+        }
         with self._lock:
             self._jobs_by_key = normalized_jobs
             self._clouds_by_key = normalized_clouds
+            self._queue_definitions_by_key = normalized_queue_definitions
             self.profiles = normalized_profiles
             self.gotify = (gotify or self.gotify).normalized()
             self.queues = (queues or self.queues).normalized()
+            self.bandwidth = (bandwidth or self.bandwidth).normalized()
+            self.logging = (logging or self.logging).normalized()
 
     def list_jobs(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -449,6 +547,19 @@ class JobCatalog:
     def get_job(self, key: str) -> JobDefinition | None:
         with self._lock:
             return self._jobs_by_key.get(key)
+
+    def list_queue_definitions(self) -> list[dict[str, Any]]:
+        with self._lock:
+            ordered = sorted(self._queue_definitions_by_key.values(), key=lambda item: item.key)
+            return [item.to_dict() for item in ordered]
+
+    def raw_queue_definitions(self) -> list[QueueDefinition]:
+        with self._lock:
+            return sorted(self._queue_definitions_by_key.values(), key=lambda item: item.key)
+
+    def get_queue_definition(self, key: str) -> QueueDefinition | None:
+        with self._lock:
+            return self._queue_definitions_by_key.get(key)
 
     def list_backup_jobs(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -482,3 +593,37 @@ class JobCatalog:
                     jobs.append(job)
         jobs.sort(key=lambda item: (item.order, item.key))
         return jobs
+
+
+def normalize_bwlimit(limit: str | None) -> str | None:
+    raw_limit = str(limit or "").strip()
+    if not raw_limit or raw_limit.lower() in DISABLED_BWLIMIT_VALUES:
+        return None
+    return raw_limit
+
+
+def apply_rclone_bwlimit(command: list[str], limit: str | None) -> list[str]:
+    normalized_limit = normalize_bwlimit(limit)
+    if not command or command[0] != "rclone":
+        return list(command)
+
+    cleaned: list[str] = []
+    skip_next = False
+    for index, part in enumerate(command):
+        if skip_next:
+            skip_next = False
+            continue
+        if part == "--bwlimit":
+            skip_next = index + 1 < len(command)
+            continue
+        if part.startswith("--bwlimit="):
+            continue
+        cleaned.append(part)
+
+    if normalized_limit:
+        cleaned.extend(["--bwlimit", normalized_limit])
+    return cleaned
+
+
+def effective_bwlimit(global_limit: str | None, queue_limit: str | None) -> str | None:
+    return normalize_bwlimit(queue_limit) or normalize_bwlimit(global_limit)

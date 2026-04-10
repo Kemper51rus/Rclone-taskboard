@@ -1,6 +1,6 @@
 # 🔄 Legacy Migration
 
-Этот документ описывает переход со старого shell/systemd runtime на текущий hybrid runtime приложения.
+Этот документ описывает переход со старой связки shell-скриптов и systemd на текущий hybrid runtime приложения.
 
 ---
 
@@ -26,7 +26,7 @@ Legacy stack обычно включал:
 
 | Аргумент | Назначение |
 | --- | --- |
-| `systemd` или `docker` | Целевой deployment mode |
+| `systemd` или `docker` | Целевой способ развертывания |
 | `target-root` | Каталог установки, по умолчанию `/opt/rclone-hybrid` |
 
 ---

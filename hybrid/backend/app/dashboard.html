@@ -51,12 +51,17 @@
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       backdrop-filter: blur(14px);
+      position: relative;
     }
     .hero {
       padding: 28px;
       margin-bottom: 18px;
       display: grid;
       gap: 18px;
+    }
+    .hero.has-open-select,
+    .panel.has-open-select {
+      z-index: 60;
     }
     .hero-top {
       display: grid;
@@ -93,6 +98,22 @@
       gap: 10px;
       width: 100%;
     }
+    .hero-actions .hero-bandwidth {
+      width: 128px;
+      min-width: 128px;
+      flex: 0 0 128px;
+      order: 4;
+    }
+    .hero-actions .hero-bandwidth .select-shell,
+    .hero-actions .hero-bandwidth .select-menu {
+      width: 100%;
+    }
+    .hero-actions .hero-bandwidth .select-trigger {
+      min-height: 42px;
+      border-radius: 999px;
+      padding: 9px 38px 9px 14px;
+      text-align: center;
+    }
     .hero-actions button {
       width: auto;
       min-width: 128px;
@@ -109,6 +130,14 @@
       border-color: rgba(124, 224, 255, 0.58);
       background: linear-gradient(135deg, rgba(124, 224, 255, 0.24), rgba(150, 255, 218, 0.24));
       box-shadow: inset 0 0 0 1px rgba(124, 224, 255, 0.16);
+    }
+    .hero-actions button.has-status-on {
+      border-color: rgba(151, 255, 63, 0.52);
+      box-shadow: inset 0 0 0 1px rgba(151, 255, 63, 0.12);
+    }
+    .hero-actions button.has-status-warning {
+      border-color: rgba(255, 90, 104, 0.75);
+      box-shadow: 0 0 0 1px rgba(255, 90, 104, 0.18), inset 0 0 0 1px rgba(255, 90, 104, 0.12);
     }
     button,
     input,
@@ -232,7 +261,7 @@
       box-shadow: 0 0 0 3px rgba(124, 224, 255, 0.08), inset 0 0 0 1px rgba(124, 224, 255, 0.12);
     }
     .select-shell.is-open {
-      z-index: 30;
+      z-index: 400;
     }
     .select-menu {
       position: absolute;
@@ -246,7 +275,16 @@
       box-shadow: var(--shadow);
       display: none;
       max-height: 260px;
-      overflow: auto;
+      overflow-x: hidden;
+      overflow-y: auto;
+      z-index: 401;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .select-menu::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none;
     }
     .select-shell.is-open .select-menu {
       display: grid;
@@ -329,6 +367,7 @@
       color: var(--muted);
       line-height: 1.45;
       text-align: right;
+      white-space: pre-wrap;
       overflow-wrap: anywhere;
       cursor: pointer;
       user-select: text;
@@ -352,6 +391,29 @@
     }
     .hero-message.service-error {
       color: var(--bad);
+    }
+    .hero-message.run-detail {
+      justify-self: start;
+      text-align: left;
+      max-width: 720px;
+    }
+    .run-link {
+      border: none;
+      background: transparent;
+      color: var(--accent);
+      padding: 0;
+      border-radius: 0;
+      cursor: pointer;
+      font: inherit;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .run-link:hover {
+      transform: none;
+      box-shadow: none;
+      background: transparent;
+      border: none;
+      color: var(--accent-2);
     }
     .status-grid {
       display: grid;
@@ -384,6 +446,86 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    .copy-progress-panel {
+      margin-bottom: 18px;
+    }
+    .copy-progress-list {
+      display: grid;
+      gap: 12px;
+    }
+    .copy-progress-item {
+      padding: 16px 18px;
+      border-radius: 18px;
+      border: 1px solid rgba(141, 181, 212, 0.14);
+      background:
+        linear-gradient(135deg, rgba(124, 224, 255, 0.09), transparent 32%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018));
+    }
+    .copy-progress-head,
+    .copy-progress-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .copy-progress-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .copy-progress-subtitle,
+    .copy-progress-meta {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .copy-progress-bar {
+      position: relative;
+      height: 14px;
+      margin: 12px 0 10px;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid rgba(141, 181, 212, 0.18);
+      background:
+        linear-gradient(180deg, rgba(6, 11, 18, 0.9), rgba(16, 24, 36, 0.88));
+      box-shadow: inset 0 1px 8px rgba(0, 0, 0, 0.34);
+    }
+    .copy-progress-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0%;
+      border-radius: inherit;
+      background:
+        linear-gradient(90deg, rgba(124, 224, 255, 0.9), rgba(150, 255, 218, 0.92));
+      box-shadow: 0 0 24px rgba(124, 224, 255, 0.24);
+      transition: width 320ms ease;
+    }
+    .copy-progress-fill.indeterminate {
+      width: 42%;
+      background:
+        linear-gradient(90deg, rgba(124, 224, 255, 0.18), rgba(124, 224, 255, 0.95), rgba(150, 255, 218, 0.2));
+      animation: copy-progress-scan 1.8s linear infinite;
+    }
+    .copy-progress-meta strong {
+      color: var(--text);
+      font-size: 14px;
+      letter-spacing: 0.04em;
+    }
+    .copy-progress-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .copy-progress-actions button {
+      min-width: 92px;
+      min-height: 38px;
+      padding: 8px 14px;
+    }
+    @keyframes copy-progress-scan {
+      from { transform: translateX(-110%); }
+      to { transform: translateX(260%); }
     }
     .main-grid {
       display: grid;
@@ -834,13 +976,26 @@
         <p class="hero-message" id="messagePanel" role="status" aria-live="polite"></p>
       </div>
       <div class="hero-actions">
+        <div class="hero-bandwidth">
+          <select id="globalBandwidthLimit" aria-label="Общий лимит скорости"></select>
+        </div>
         <button id="cloudsToggle" onclick="toggleClouds()">Облака</button>
         <button id="queuesToggle" onclick="toggleQueues()">Очереди</button>
+        <button id="loggingToggle" onclick="toggleLogging()">Логи</button>
         <button id="gotifyToggle" onclick="toggleGotify()">Gotify</button>
       </div>
     </section>
 
     <section class="status-grid" id="statusGrid"></section>
+
+    <section class="panel copy-progress-panel" id="copyProgressPanel">
+      <div class="panel-header">
+        <div>
+          <h3>Прогресс копирования</h3>
+        </div>
+      </div>
+      <div class="copy-progress-list" id="copyProgressList"></div>
+    </section>
 
     <div class="main-grid">
       <div id="leftColumn">
@@ -864,111 +1019,21 @@
           <div class="panel-header">
             <div>
               <h3>Облака</h3>
-            </div>
-            <div class="row">
-              <button class="secondary" type="button" onclick="importCloudsFromRclone()">Импорт из rclone</button>
-              <button class="ghost" type="button" onclick="newCloud()">Новое облако</button>
-              <button type="button" onclick="saveClouds()">Сохранить</button>
+              <div class="field-meta">Только просмотр remotes из текущего `rclone.conf`. Редактирование через интерфейс отключено.</div>
             </div>
           </div>
           <div class="clouds-list" id="cloudsList"></div>
-          <div class="panel editor" id="cloudEditor" hidden style="margin-top:16px; margin-bottom:0; padding:16px;">
-            <div class="panel-header" style="margin-bottom:12px;">
-              <div>
-                <h3 id="cloudEditorTitle">Новое облако</h3>
-              </div>
-              <div class="row">
-                <button class="secondary" type="button" onclick="testCloudConnection()">Проверить</button>
-                <button type="button" onclick="upsertCurrentCloud()">Записать</button>
-              </div>
-            </div>
-            <div class="editor-stack">
-              <div class="subpanel">
-                <div class="eyebrow">Идентичность</div>
-                <div class="editor-grid">
-                  <div class="field">
-                    <label for="cloudTitle">Название</label>
-                    <input id="cloudTitle" placeholder="Mail Cloud" />
-                  </div>
-                  <div class="field">
-                    <label for="cloudKey">Ключ облака</label>
-                    <input id="cloudKey" placeholder="mail_cloud" />
-                    <div class="field-meta">Внутренний ключ для задач и привязки облака.</div>
-                  </div>
-                  <div class="field">
-                    <label for="cloudProvider">Провайдер</label>
-                    <select id="cloudProvider"></select>
-                  </div>
-                  <div class="field">
-                    <label for="cloudRemoteName">Имя remote</label>
-                    <div class="row">
-                      <input id="cloudRemoteName" placeholder="mail" />
-                      <button type="button" class="secondary" onclick="importCurrentRemote()">Подтянуть</button>
-                    </div>
-                    <div class="field-meta">Имя секции в `rclone.conf`, которое будет использоваться в путях.</div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="subpanel">
-                <div class="eyebrow">Подключение</div>
-                <div class="editor-grid">
-                  <div class="field">
-                    <label for="cloudUsername">Имя пользователя</label>
-                    <input id="cloudUsername" placeholder="user@example.com" />
-                  </div>
-                  <div class="field">
-                    <label for="cloudToken">Token / пароль</label>
-                    <input id="cloudToken" type="password" placeholder="access token" />
-                    <div class="field-meta" id="cloudTokenHint">Для простых backend сюда можно класть токен или пароль. Для `drive` нужен полный OAuth JSON.</div>
-                  </div>
-                  <div class="field full">
-                    <label for="cloudEndpoint">Endpoint / URL</label>
-                    <input id="cloudEndpoint" placeholder="https://cloud.example.com" />
-                  </div>
-                  <div class="field full">
-                    <label for="cloudRootPath">Корневой путь</label>
-                    <input id="cloudRootPath" placeholder="/BACKUPS" />
-                    <div class="field-meta">Базовая папка внутри remote, которая будет подставляться в задачи.</div>
-                  </div>
-                  <div class="field full">
-                    <label for="cloudExtraConfig">Доп. параметры rclone.conf</label>
-                    <textarea id="cloudExtraConfig" placeholder="client_id = ...&#10;client_secret = ...&#10;scope = drive&#10;team_drive = ..."></textarea>
-                    <div class="field-meta">По одной строке `key = value`. Сюда попадают provider-specific поля, которых нет в основной форме.</div>
-                  </div>
-                  <div class="field full">
-                    <button type="button" class="toggle-chip" id="cloudEnabled" aria-pressed="true">Облако активно</button>
-                  </div>
-                </div>
-              </div>
-
-              <div class="subpanel">
-                <div class="eyebrow">Заметки</div>
-                <div class="field full">
-                  <label for="cloudNotes">Описание</label>
-                  <textarea id="cloudNotes" placeholder="Описание, ограничения, способ авторизации"></textarea>
-                </div>
-              </div>
-            </div>
-            <div class="editor-actions">
-              <button class="ghost" type="button" id="deleteCloudButton" onclick="deleteCurrentCloud()" disabled>Удалить</button>
-            </div>
-          </div>
         </section>
 
         <section class="panel" id="queuesPanel" hidden>
           <div class="token-card" style="padding:0; border:none; background:none;">
             <div>
               <div class="eyebrow">Тестовый запуск</div>
-              <div class="editor-actions" style="margin-top:10px;">
-                <button type="button" onclick="enqueueProfile('standard')">Запустить standard</button>
-                <button type="button" onclick="enqueueProfile('heavy')">Запустить heavy</button>
-                <button type="button" onclick="enqueueProfile('all')">Запустить всё</button>
-              </div>
+              <div class="editor-actions" style="margin-top:10px;" id="queuesLaunchActions"></div>
             </div>
             <div>
               <div class="eyebrow">Настройка очередей</div>
-              <button type="button" class="toggle-chip" id="queuesParallelProfiles" aria-pressed="false">Разрешить parallel standard + heavy</button>
+              <button type="button" class="toggle-chip" id="queuesParallelProfiles" aria-pressed="false">Разрешить параллельную работу разных очередей</button>
             </div>
             <div>
               <button type="button" class="toggle-chip" id="queuesSchedulerQueueing" aria-pressed="false">Scheduler может накапливать задачи в очереди</button>
@@ -976,7 +1041,12 @@
             <div>
               <button type="button" class="toggle-chip" id="queuesEventQueueing" aria-pressed="false">События watcher могут вставать в очередь</button>
             </div>
-            <small>Если parallel выключен, standard и heavy не запускаются одновременно. Если queueing выключен, scheduler и watcher пропускают новые постановки при занятой системе.</small>
+            <small>Если параллельность выключена, одновременно работает только одна очередь. Если queueing выключен, scheduler и watcher пропускают новые постановки при занятой системе.</small>
+            <div class="clouds-list" id="queuesDefinitionsList" style="margin-top:14px;"></div>
+            <div id="queueDefinitionDetails" style="margin-top:14px;"></div>
+            <div class="editor-actions">
+              <button type="button" class="secondary" onclick="addQueueDefinition()">Новая очередь</button>
+            </div>
           </div>
           <div class="editor-actions">
             <button onclick="saveQueueSettings()">Сохранить</button>
@@ -988,6 +1058,9 @@
           <div class="panel-header">
             <div>
               <h3>История запусков</h3>
+            </div>
+            <div class="row">
+              <button type="button" class="secondary" onclick="clearRunHistory()">Очистить</button>
             </div>
           </div>
           <table>
@@ -1056,10 +1129,7 @@
             </div>
 	            <div class="field">
 	              <label for="jobProfile">Очередь</label>
-              <select id="jobProfile">
-                <option value="standard">standard</option>
-                <option value="heavy">heavy</option>
-              </select>
+              <select id="jobProfile"></select>
             </div>
             <div class="field">
               <label for="jobTimeout">Timeout, сек</label>
@@ -1232,6 +1302,26 @@
           </div>
         </section>
 
+        <section class="panel" id="loggingPanel" hidden>
+          <div class="token-card" style="padding:0; border:none; background:none;">
+            <div>
+              <div class="eyebrow">Rclone лог</div>
+              <div class="row" style="align-items:center; gap:10px; flex-wrap:nowrap; width:max-content;">
+                <button type="button" class="toggle-chip" id="rcloneLogEnabled" aria-pressed="false" style="white-space:nowrap;">Писать лог</button>
+                <button type="button" class="secondary" onclick="clearRcloneLogs()" style="white-space:nowrap;">Очистить лог</button>
+              </div>
+            </div>
+            <small>Когда выключено, прогресс берётся из stdout/stderr процесса без `--log-file`. Когда включено, для новых запусков создаются отдельные логи по шагам в `hybrid/backend/data/rclone-logs`.</small>
+            <div class="row" style="margin-top:14px; align-items:center; gap:10px; flex-wrap:nowrap; width:max-content;">
+              <label for="rcloneLogTailLines" style="margin:0;">Строк лога</label>
+              <div class="row" style="align-items:center; gap:10px; flex-wrap:nowrap;">
+                <input id="rcloneLogTailLines" type="number" min="1" max="2000" step="1" value="1" inputmode="numeric" style="width:96px;" />
+                <button class="secondary" onclick="showLatestRcloneLog()">Показать</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
       </div>
     </div>
 
@@ -1270,17 +1360,17 @@
     const state = {
       jobs: [],
       clouds: [],
-      providers: [],
       gotify: { enabled: false, url: "", token: "", default_priority: 5 },
-      queues: { allow_parallel_profiles: false, allow_scheduler_queueing: false, allow_event_queueing: false },
+      queues: { allow_parallel_profiles: false, allow_scheduler_queueing: false, allow_event_queueing: false, definitions: [] },
+      bandwidth: { limit: null },
+      logging: { rclone_log_enabled: false },
+      selectedQueueKey: null,
       showClouds: false,
       showGotify: false,
       showQueues: false,
-      creatingNewCloud: false,
+      showLogging: false,
       creatingNewJob: false,
       editingKey: null,
-      editingCloudKey: null,
-      cloudKeyEditedManually: false,
       keyEditedManually: false,
       toastTimer: null,
       toastHideTimer: null,
@@ -1293,6 +1383,24 @@
     };
 
     const weekdayLabels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+    const bandwidthPresets = [
+      { value: "", label: "Без лимита" },
+      { value: "2M", label: "2 MB/s" },
+      { value: "5M", label: "5 MB/s" },
+      { value: "10M", label: "10 MB/s" },
+      { value: "20M", label: "20 MB/s" },
+      { value: "50M", label: "50 MB/s" },
+      { value: "100M", label: "100 MB/s" },
+    ];
+    const queueBandwidthPresets = [
+      { value: "", label: "Глобальный лимит" },
+      { value: "2M", label: "2 MB/s" },
+      { value: "5M", label: "5 MB/s" },
+      { value: "10M", label: "10 MB/s" },
+      { value: "20M", label: "20 MB/s" },
+      { value: "50M", label: "50 MB/s" },
+      { value: "100M", label: "100 MB/s" },
+    ];
     const weekdayGrid = document.getElementById("weekdayGrid");
     weekdayGrid.innerHTML = weekdayLabels.map((label, index) => `
       <label>
@@ -1323,6 +1431,28 @@
       }, 5040);
     }
 
+    function setRunDetailToast(message, tone = "muted") {
+      const panel = document.getElementById("messagePanel");
+      if (state.toastTimer) {
+        clearTimeout(state.toastTimer);
+        state.toastTimer = null;
+      }
+      if (state.toastHideTimer) {
+        clearTimeout(state.toastHideTimer);
+        state.toastHideTimer = null;
+      }
+      panel.hidden = false;
+      panel.className = `hero-message run-detail is-visible ${tone === "error" ? "error" : (tone === "ok" ? "ok" : "")}`.trim();
+      panel.textContent = message;
+      void panel.offsetWidth;
+      state.toastTimer = window.setTimeout(() => {
+        panel.classList.remove("is-visible");
+      }, 40);
+      state.toastHideTimer = window.setTimeout(() => {
+        closeMessageModal();
+      }, 5040);
+    }
+
     async function copyMessagePanelText() {
       const panel = document.getElementById("messagePanel");
       const text = (panel?.textContent || "").trim();
@@ -1341,7 +1471,7 @@
           document.execCommand("copy");
           document.body.removeChild(helper);
         }
-        setToast(`Скопировано: ${text}`, "ok");
+        setToast("Скопировано!", "ok");
       } catch (error) {
         setToast("Не удалось скопировать сообщение", "error");
       }
@@ -1410,8 +1540,9 @@
 
     function statusClass(status) {
       if (status === "succeeded") return "ok";
+      if (status === "stopped") return "warn";
       if (status === "failed") return "bad";
-      if (status === "running" || status === "queued") return "warn";
+      if (status === "running" || status === "queued" || status === "paused") return "warn";
       return "";
     }
 
@@ -1456,12 +1587,101 @@
       ];
     }
 
+    function copyProgressPercent(item) {
+      const raw = Number(item?.percent);
+      if (Number.isFinite(raw)) return Math.min(100, Math.max(0, raw));
+      if (item?.status === "queued") return 0;
+      return null;
+    }
+
+    function copyProgressSummary(item) {
+      const parts = [];
+      if (item?.transferred && item?.total) {
+        parts.push(`${item.transferred} / ${item.total}`);
+      } else if (item?.transferred) {
+        parts.push(item.transferred);
+      } else if (item?.status === "queued") {
+        parts.push("Ожидает запуска");
+      } else if (item?.status === "paused") {
+        parts.push("Пауза");
+      } else {
+        parts.push("Ожидание статистики rclone");
+      }
+      if (item?.speed) parts.push(item.speed);
+      if (item?.eta) parts.push(`ETA ${item.eta}`);
+      return parts.join(" • ");
+    }
+
+    function renderCopyProgress(items, activeOperations = []) {
+      const container = document.getElementById("copyProgressList");
+      if (!container) return;
+      if (!items.length) {
+        const fallback = activeOperations.find((item) => item.status === "running" || item.status === "paused" || item.status === "queued");
+        if (fallback) {
+          const kindLabel = fallback.step_kind === "retention"
+            ? "Сейчас выполняется retention-этап, активного копирования нет."
+            : "Сейчас выполняется задача без копирования, прогресс-бар скрыт.";
+          container.innerHTML = `<div class="empty">${escapeHtml(fallback.title || fallback.job_key || "job")} • ${escapeHtml(fallback.profile || "")}<br />${escapeHtml(kindLabel)}</div>`;
+          return;
+        }
+        container.innerHTML = `<div class="empty">Активных задач копирования сейчас нет.</div>`;
+        return;
+      }
+      container.innerHTML = items.map((item) => {
+        const percent = copyProgressPercent(item);
+        const fillClass = percent === null ? "copy-progress-fill indeterminate" : "copy-progress-fill";
+        const fillStyle = percent === null ? "" : `style="width:${percent}%"`;
+        const statusLabel = item.status === "paused" ? "paused" : (item.status === "running" ? "running" : "queued");
+        const subtitle = [`run #${item.run_id}`, item.profile, item.transfer_mode].filter(Boolean).join(" • ");
+        const meta = copyProgressSummary(item);
+        const progressValue = percent === null ? "..." : `${percent}%`;
+        return `
+          <article class="copy-progress-item">
+            <div class="copy-progress-head">
+              <div>
+                <div class="copy-progress-title">${escapeHtml(item.title || item.job_key || "backup job")}</div>
+                <div class="copy-progress-subtitle">${escapeHtml(subtitle)}</div>
+              </div>
+              <div class="pill ${item.status === "running" ? "ok" : "warn"}">${statusLabel}</div>
+            </div>
+            <div class="copy-progress-bar">
+              <div class="${fillClass}" ${fillStyle}></div>
+            </div>
+            <div class="copy-progress-meta">
+              <span>${escapeHtml(meta)}</span>
+              <strong>${escapeHtml(progressValue)}</strong>
+            </div>
+            <div class="copy-progress-actions">
+              <button type="button" class="secondary" onclick="controlCopyStep(${item.step_id}, 'pause')" ${item.can_pause ? "" : "disabled"}>Пауза</button>
+              <button type="button" class="secondary" onclick="controlCopyStep(${item.step_id}, 'resume')" ${item.can_resume ? "" : "disabled"}>Плей</button>
+              <button type="button" class="ghost" onclick="controlCopyStep(${item.step_id}, 'stop')" ${item.can_stop ? "" : "disabled"}>Стоп</button>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    async function controlCopyStep(stepId, action) {
+      try {
+        const response = await fetch(`/api/run-steps/${stepId}/control`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "control failed");
+        refreshSnapshot().catch(() => {});
+      } catch (error) {
+        setToast(error.message || "Ошибка управления задачей", "error");
+      }
+    }
+
     function updateRunsLayout() {
       const leftSlot = document.getElementById("historySlotLeft");
       const rightSlot = document.getElementById("historySlotRight");
       const runsPanel = document.getElementById("runsPanel");
       const editorHidden = document.getElementById("editorPanel").hidden;
-      const shouldPlaceRight = state.showQueues || (editorHidden && !state.showGotify && !state.showClouds);
+      const shouldPlaceRight = state.showQueues || (editorHidden && !state.showGotify && !state.showClouds && !state.showLogging);
       const target = shouldPlaceRight ? rightSlot : leftSlot;
       if (runsPanel.parentElement !== target) {
         target.appendChild(runsPanel);
@@ -1472,14 +1692,15 @@
       const container = document.getElementById("cloudsList");
       if (!container) return;
       if (!state.clouds.length) {
-        container.innerHTML = `<div class="empty">Облака ещё не добавлены.</div>`;
+        container.innerHTML = '<div class="empty">В <code>rclone.conf</code> не найдено ни одного remote.</div>';
         return;
       }
       container.innerHTML = state.clouds.map((cloud) => `
-        <article class="job-card cloud-card clickable ${cloud.enabled ? "" : "disabled"} ${state.editingCloudKey === cloud.key ? "selected" : ""}" onclick="editCloud('${cloud.key}')">
+        <article class="job-card cloud-card ${cloud.enabled ? "" : "disabled"}">
           <div class="job-top">
             <div>
               <div class="job-title">${escapeHtml(cloud.display_title || cloud.title || cloud.key)}</div>
+              <div class="job-meta">${escapeHtml(cloud.key)}</div>
             </div>
             <div class="pill ${cloud.enabled ? "ok" : "bad"}">${cloud.enabled ? "enabled" : "disabled"}</div>
           </div>
@@ -1488,8 +1709,57 @@
             ${cloud.remote_name ? `<div class="pill">${escapeHtml(cloud.remote_name)}</div>` : ""}
             ${cloud.username ? `<div class="pill">${escapeHtml(cloud.username)}</div>` : ""}
           </div>
+          ${cloud.root_path || cloud.endpoint || cloud.notes ? `
+            <div class="job-meta" style="margin-top:10px;">
+              ${cloud.root_path ? `root: ${escapeHtml(cloud.root_path)}` : ""}
+              ${cloud.root_path && cloud.endpoint ? " • " : ""}
+              ${cloud.endpoint ? `endpoint: ${escapeHtml(cloud.endpoint)}` : ""}
+              ${(cloud.root_path || cloud.endpoint) && cloud.notes ? " • " : ""}
+              ${cloud.notes ? escapeHtml(cloud.notes) : ""}
+            </div>
+          ` : ""}
         </article>
       `).join("");
+    }
+
+    function queueDefinitions() {
+      const definitions = Array.isArray(state.queues?.definitions) ? state.queues.definitions : [];
+      return definitions.filter((item) => item && item.key);
+    }
+
+    function selectedQueueIndex() {
+      const definitions = queueDefinitions();
+      if (!definitions.length) return -1;
+      const currentIndex = definitions.findIndex((item) => item.key === state.selectedQueueKey);
+      if (currentIndex >= 0) return currentIndex;
+      state.selectedQueueKey = definitions[0].key;
+      return 0;
+    }
+
+    function selectQueueDefinition(index) {
+      const item = queueDefinitions()[index];
+      if (!item) return;
+      state.selectedQueueKey = item.key;
+      renderQueueDefinitions();
+    }
+
+    function getDefaultQueueKey() {
+      return queueDefinitions().find((item) => item.enabled !== false)?.key || queueDefinitions()[0]?.key || "standard";
+    }
+
+    function renderQueueOptions(selectedKey = "") {
+      const select = document.getElementById("jobProfile");
+      if (!select) return;
+      const definitions = queueDefinitions();
+      const options = definitions.map((item) => (
+        `<option value="${escapeHtml(item.key)}">${escapeHtml(item.title || item.key)}</option>`
+      ));
+      select.innerHTML = options.join("");
+      const fallback = selectedKey && definitions.some((item) => item.key === selectedKey)
+        ? selectedKey
+        : getDefaultQueueKey();
+      select.value = fallback;
+      refreshCustomSelect(select);
     }
 
     function renderJobCloudOptions(selectedKey = "") {
@@ -1506,35 +1776,12 @@
       refreshCustomSelect("jobCloud");
     }
 
-    function renderCloudProviderOptions(selectedValue = "") {
-      const select = document.getElementById("cloudProvider");
-      if (!select) return;
-      const providers = Array.isArray(state.providers) ? state.providers : [];
-      const knownValues = new Set(providers.map((provider) => provider.name));
-      const currentValue = (selectedValue || "").trim() || "generic";
-      const options = [];
-      if (!knownValues.has("generic")) {
-        options.push('<option value="generic">generic</option>');
-      }
-      if (currentValue && !knownValues.has(currentValue) && currentValue !== "generic") {
-        options.push(`<option value="${escapeHtml(currentValue)}">${escapeHtml(currentValue)} (custom)</option>`);
-      }
-      providers.forEach((provider) => {
-        const label = provider.description
-          ? `${provider.name} - ${provider.description}`
-          : provider.name;
-        options.push(`<option value="${escapeHtml(provider.name)}">${escapeHtml(label)}</option>`);
-      });
-      select.innerHTML = options.join("");
-      select.value = currentValue;
-      refreshCustomSelect("cloudProvider");
-    }
-
     function closeCustomSelects(exceptId = null) {
       document.querySelectorAll(".select-shell.is-open").forEach((shell) => {
         const select = shell.querySelector("select");
         if (select && select.id === exceptId) return;
         shell.classList.remove("is-open");
+        shell.closest(".panel, .hero")?.classList.remove("has-open-select");
       });
     }
 
@@ -1552,7 +1799,7 @@
 
     function initCustomSelect(select) {
       if (!select || select.__customSelect) return;
-      const isSearchable = select.id === "cloudProvider";
+      const isSearchable = false;
       const shell = document.createElement("div");
       shell.className = "select-shell";
       const trigger = document.createElement("button");
@@ -1618,6 +1865,7 @@
         const willOpen = !shell.classList.contains("is-open");
         closeCustomSelects(select.id);
         shell.classList.toggle("is-open", willOpen);
+        shell.closest(".panel, .hero")?.classList.toggle("has-open-select", willOpen);
         if (willOpen && search) {
           search.value = "";
           rebuild();
@@ -1629,6 +1877,7 @@
           event.preventDefault();
           closeCustomSelects(select.id);
           shell.classList.add("is-open");
+          shell.closest(".panel, .hero")?.classList.add("has-open-select");
           if (search) {
             search.value = "";
             rebuild();
@@ -1636,6 +1885,7 @@
           }
         } else if (event.key === "Escape") {
           shell.classList.remove("is-open");
+          shell.closest(".panel, .hero")?.classList.remove("has-open-select");
         }
       });
       if (search) {
@@ -1644,6 +1894,7 @@
           if (event.key === "Escape") {
             event.preventDefault();
             shell.classList.remove("is-open");
+            shell.closest(".panel, .hero")?.classList.remove("has-open-select");
             trigger.focus();
           }
         });
@@ -1673,9 +1924,6 @@
       const toggle = document.getElementById("cloudsToggle");
       panel.hidden = !state.showClouds;
       toggle.classList.toggle("is-active", state.showClouds);
-      if (!state.editingCloudKey && !state.creatingNewCloud) {
-        document.getElementById("cloudEditor").hidden = true;
-      }
       renderCloudList();
       updateRunsLayout();
     }
@@ -1688,7 +1936,177 @@
       setTogglePressed("queuesParallelProfiles", Boolean(state.queues.allow_parallel_profiles));
       setTogglePressed("queuesSchedulerQueueing", Boolean(state.queues.allow_scheduler_queueing));
       setTogglePressed("queuesEventQueueing", Boolean(state.queues.allow_event_queueing));
+      renderQueueLaunchActions();
+      renderQueueDefinitions();
       updateRunsLayout();
+    }
+
+    function renderQueueLaunchActions() {
+      const container = document.getElementById("queuesLaunchActions");
+      if (!container) return;
+      const definitions = queueDefinitions().filter((item) => item.enabled !== false);
+      const buttons = definitions.map((item) => (
+        `<button type="button" onclick="enqueueProfile('${escapeHtml(item.key)}')">Запустить ${escapeHtml(item.title || item.key)}</button>`
+      ));
+      buttons.push('<button type="button" onclick="enqueueAllQueues()">Запустить всё</button>');
+      container.innerHTML = buttons.join("");
+    }
+
+    function queueBandwidthOptionsMarkup(currentValue = "") {
+      const normalized = normalizeBandwidthLimit(currentValue);
+      const hasPreset = queueBandwidthPresets.some((item) => item.value === normalized);
+      const items = queueBandwidthPresets.slice();
+      if (normalized && !hasPreset) {
+        items.push({ value: normalized, label: `${normalized} (текущее)` });
+      }
+      return items.map((item) => (
+        `<option value="${escapeHtml(item.value)}"${item.value === normalized ? " selected" : ""}>${escapeHtml(item.label)}</option>`
+      )).join("");
+    }
+
+    function renderQueueDefinitions() {
+      const container = document.getElementById("queuesDefinitionsList");
+      const details = document.getElementById("queueDefinitionDetails");
+      if (!container) return;
+      const definitions = queueDefinitions();
+      if (!definitions.length) {
+        container.innerHTML = '<div class="empty">Очереди не настроены.</div>';
+        if (details) details.innerHTML = "";
+        return;
+      }
+      const activeIndex = selectedQueueIndex();
+      container.innerHTML = definitions.map((item, index) => {
+        const queueLimit = normalizeBandwidthLimit(item.bandwidth_limit);
+        const globalLimit = normalizeBandwidthLimit(state.bandwidth?.limit);
+        const queueLimitLabel = queueLimit && queueLimit !== globalLimit ? queueLimit : "";
+        return `
+        <article class="job-card cloud-card clickable ${item.enabled === false ? "disabled" : ""} ${index === activeIndex ? "selected" : ""}" onclick="selectQueueDefinition(${index})">
+          <div class="job-top">
+            <div>
+              <div class="job-title">${escapeHtml(item.title || item.key)}</div>
+            </div>
+            <button type="button" class="pill status-toggle ${item.enabled === false ? "disabled" : "enabled"}" onclick="toggleQueueDefinitionEnabled(event, ${index})">${item.enabled === false ? "disabled" : "enabled"}</button>
+          </div>
+          <div class="pill-row" style="margin-top:10px;">
+            <div class="pill">воркеров ${Number(item.workers || 1)}</div>
+            ${queueLimitLabel ? `<div class="pill">${escapeHtml(queueLimitLabel)}</div>` : ""}
+          </div>
+        </article>
+      `;
+      }).join("");
+      if (!details) return;
+      const selected = definitions[activeIndex];
+      if (!selected) {
+        details.innerHTML = "";
+        return;
+      }
+      details.innerHTML = `
+        <article class="panel editor" style="margin:0; padding:16px;">
+          <div class="panel-header" style="margin-bottom:12px;">
+            <div>
+              <h3>Настройка очереди</h3>
+              <div class="field-meta">${escapeHtml(selected.key)}</div>
+            </div>
+          </div>
+          <div class="editor-grid">
+            <div class="field">
+              <label>Название</label>
+              <input value="${escapeHtml(selected.title || "")}" oninput="updateQueueDefinitionField(${activeIndex}, 'title', this.value)" />
+            </div>
+            <div class="field">
+              <label>Ключ</label>
+              <input value="${escapeHtml(selected.key)}" oninput="updateQueueDefinitionKey(${activeIndex}, this.value)" />
+            </div>
+            <div class="field">
+              <label>Воркеры</label>
+              <input type="number" min="1" value="${Number(selected.workers || 1)}" oninput="updateQueueDefinitionField(${activeIndex}, 'workers', this.value)" />
+            </div>
+            <div class="field">
+              <label>Лимит скорости</label>
+              <select onchange="updateQueueDefinitionField(${activeIndex}, 'bandwidth_limit', this.value)">${queueBandwidthOptionsMarkup(selected.bandwidth_limit || "")}</select>
+            </div>
+          </div>
+          <div class="editor-actions">
+            <button type="button" class="ghost" onclick="removeQueueDefinition(${activeIndex})" ${definitions.length <= 1 ? "disabled" : ""}>Удалить очередь</button>
+          </div>
+        </article>
+      `;
+      details.querySelectorAll("select").forEach((select) => initCustomSelect(select));
+    }
+
+    function addQueueDefinition() {
+      const nextIndex = queueDefinitions().length + 1;
+      const key = slugifyKey(`queue_${nextIndex}`);
+      state.queues.definitions.push({
+        key,
+        title: `Очередь ${nextIndex}`,
+        workers: 1,
+        bandwidth_limit: "",
+        enabled: true,
+      });
+      state.selectedQueueKey = key;
+      renderQueuesPanel();
+      renderQueueOptions(formValue("jobProfile"));
+    }
+
+    function updateQueueDefinitionField(index, field, value) {
+      const definitions = queueDefinitions();
+      const item = definitions[index];
+      if (!item) return;
+      item[field] = field === "workers" ? Math.max(1, Number(value || 1)) : value;
+      if (field === "title" || field === "workers" || field === "bandwidth_limit") {
+        renderQueueDefinitions();
+      }
+      if (field === "title") {
+        renderQueueLaunchActions();
+        renderQueueOptions(formValue("jobProfile"));
+      }
+    }
+
+    function updateQueueDefinitionKey(index, value) {
+      const definitions = queueDefinitions();
+      const item = definitions[index];
+      if (!item) return;
+      const previousKey = item.key;
+      const normalized = slugifyKey(value || item.title || `queue_${index + 1}`);
+      item.key = normalized;
+      if (!item.title) item.title = normalized;
+      state.jobs.forEach((job) => {
+        if (job.profile === previousKey) {
+          job.profile = normalized;
+        }
+      });
+      if (document.getElementById("jobProfile").value === previousKey) {
+        document.getElementById("jobProfile").value = normalized;
+      }
+      state.selectedQueueKey = normalized;
+      renderQueuesPanel();
+      renderQueueOptions(normalized);
+    }
+
+    function toggleQueueDefinitionEnabled(event, index) {
+      event.stopPropagation();
+      const item = queueDefinitions()[index];
+      if (!item) return;
+      item.enabled = item.enabled === false ? true : false;
+      renderQueuesPanel();
+      renderQueueOptions(formValue("jobProfile"));
+    }
+
+    function removeQueueDefinition(index) {
+      const definitions = queueDefinitions();
+      const item = definitions[index];
+      if (!item || definitions.length <= 1) return;
+      const fallbackKey = definitions.find((entry, entryIndex) => entryIndex !== index)?.key || getDefaultQueueKey();
+      state.jobs.forEach((job) => {
+        if (job.profile === item.key) {
+          job.profile = fallbackKey;
+        }
+      });
+      state.queues.definitions.splice(index, 1);
+      state.selectedQueueKey = fallbackKey;
+      renderQueuesPanel();
+      renderQueueOptions(fallbackKey);
     }
 
     function renderGotifyPanel() {
@@ -1700,7 +2118,38 @@
       document.getElementById("gotifyUrl").value = state.gotify.url || "";
       document.getElementById("gotifyToken").value = state.gotify.token || "";
       document.getElementById("gotifyPriority").value = state.gotify.default_priority || 5;
+      renderHeroStatusIndicators();
       updateRunsLayout();
+    }
+
+    function renderLoggingPanel() {
+      const panel = document.getElementById("loggingPanel");
+      const toggle = document.getElementById("loggingToggle");
+      panel.hidden = !state.showLogging;
+      toggle.classList.toggle("is-active", state.showLogging);
+      setTogglePressed("rcloneLogEnabled", Boolean(state.logging?.rclone_log_enabled));
+      renderHeroStatusIndicators();
+      updateRunsLayout();
+    }
+
+    function renderHeroStatusIndicators() {
+      const loggingToggle = document.getElementById("loggingToggle");
+      const gotifyToggle = document.getElementById("gotifyToggle");
+      const loggingEnabled = Boolean(state.logging?.rclone_log_enabled);
+      const gotifyEnabled = Boolean(state.gotify?.enabled);
+      const needsGotifyAttention = loggingEnabled && !gotifyEnabled;
+
+      loggingToggle.classList.toggle("has-status-on", loggingEnabled);
+      gotifyToggle.classList.toggle("has-status-on", gotifyEnabled);
+      loggingToggle.classList.toggle("has-status-warning", needsGotifyAttention);
+      gotifyToggle.classList.toggle("has-status-warning", needsGotifyAttention);
+
+      loggingToggle.title = needsGotifyAttention
+        ? "Логи включены, но Gotify выключен."
+        : (loggingEnabled ? "Подробный лог rclone включён." : "Подробный лог rclone выключен.");
+      gotifyToggle.title = needsGotifyAttention
+        ? "Gotify выключен при включённом логировании."
+        : (gotifyEnabled ? "Gotify включён." : "Gotify выключен.");
     }
 
     function renderStatus(snapshot) {
@@ -1715,7 +2164,7 @@
     function renderRuns(runs) {
       document.getElementById("runsBody").innerHTML = runs.map((run) => `
         <tr>
-          <td>${run.id}</td>
+          <td><button type="button" class="run-link" onclick="showRunDetails(${run.id})">${run.id}</button></td>
           <td class="${statusClass(run.status)}">${run.status}</td>
           <td>${run.profile}</td>
           <td>${run.trigger_type}</td>
@@ -1734,8 +2183,56 @@
       if (job.options.min_age) args.push("--min-age", job.options.min_age);
       (job.options.exclude || []).forEach((pattern) => args.push("--exclude", pattern));
       (job.options.extra_args || []).forEach((item) => args.push(item));
-      const base = ["rclone", job.transfer_mode, job.source_path, job.destination_path, ...args];
+      const base = ["rclone", job.transfer_mode, job.source_path, job.destination_path, ...applyPreviewBwlimit(args)];
       return base.join(" ");
+    }
+
+    function normalizeBandwidthLimit(value) {
+      const normalized = String(value || "").trim();
+      if (!normalized) return "";
+      if (["off", "none", "unlimited", "disabled", "0", "0b", "0k", "0m", "0g"].includes(normalized.toLowerCase())) {
+        return "";
+      }
+      return normalized;
+    }
+
+    function applyPreviewBwlimit(args) {
+      const limit = normalizeBandwidthLimit(state.bandwidth?.limit);
+      const cleaned = [];
+      for (let index = 0; index < args.length; index += 1) {
+        const item = args[index];
+        if (item === "--bwlimit") {
+          index += 1;
+          continue;
+        }
+        if (String(item).startsWith("--bwlimit=")) {
+          continue;
+        }
+        cleaned.push(item);
+      }
+      if (limit) {
+        cleaned.push("--bwlimit", limit);
+      }
+      return cleaned;
+    }
+
+    function renderBandwidthControl() {
+      const select = document.getElementById("globalBandwidthLimit");
+      if (!select) return;
+      const currentValue = normalizeBandwidthLimit(state.bandwidth?.limit);
+      const hasPreset = bandwidthPresets.some((item) => item.value === currentValue);
+      const options = bandwidthPresets.slice();
+      if (currentValue && !hasPreset) {
+        options.push({ value: currentValue, label: `${currentValue} (текущее)` });
+      }
+      select.innerHTML = options.map((item) => (
+        `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`
+      )).join("");
+      select.value = currentValue;
+      select.title = currentValue
+        ? `Глобальный лимит ${currentValue}. Применяется к новым запускам.`
+        : "Лимит отключён. Применяется к новым запускам.";
+      refreshCustomSelect(select);
     }
 
     function renderJobs() {
@@ -1769,8 +2266,10 @@
       if (state.showClouds) {
         state.showGotify = false;
         state.showQueues = false;
+        state.showLogging = false;
         renderGotifyPanel();
         renderQueuesPanel();
+        renderLoggingPanel();
       }
       renderCloudsPanel();
     }
@@ -1782,6 +2281,8 @@
         renderCloudsPanel();
         state.showQueues = false;
         renderQueuesPanel();
+        state.showLogging = false;
+        renderLoggingPanel();
       }
       renderGotifyPanel();
     }
@@ -1793,8 +2294,23 @@
         renderCloudsPanel();
         state.showGotify = false;
         renderGotifyPanel();
+        state.showLogging = false;
+        renderLoggingPanel();
       }
       renderQueuesPanel();
+    }
+
+    function toggleLogging() {
+      state.showLogging = !state.showLogging;
+      if (state.showLogging) {
+        state.showClouds = false;
+        renderCloudsPanel();
+        state.showGotify = false;
+        renderGotifyPanel();
+        state.showQueues = false;
+        renderQueuesPanel();
+      }
+      renderLoggingPanel();
     }
 
     function escapeHtml(value) {
@@ -1823,41 +2339,6 @@
         setTogglePressed(id, next);
         if (onChange) onChange(next);
       });
-    }
-
-    function cloudSlug(value) {
-      const normalized = transliterateCyrillic(value)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_+|_+$/g, "")
-        .replace(/_+/g, "_");
-      return normalized || "cloud";
-    }
-
-    function makeUniqueCloudKey(baseKey) {
-      const normalizedBase = (baseKey || "cloud").trim() || "cloud";
-      const currentEditingKey = state.editingCloudKey;
-      const takenKeys = new Set(
-        state.clouds
-          .map((cloud) => cloud.key)
-          .filter((key) => key && key !== currentEditingKey)
-      );
-      if (!takenKeys.has(normalizedBase)) {
-        return normalizedBase;
-      }
-      let counter = 2;
-      while (takenKeys.has(`${normalizedBase}_${counter}`)) {
-        counter += 1;
-      }
-      return `${normalizedBase}_${counter}`;
-    }
-
-    function syncCloudKeyFromTitle(force = false) {
-      if (!force && state.cloudKeyEditedManually) return;
-      const titleValue = formValue("cloudTitle");
-      const providerValue = formValue("cloudProvider");
-      const baseKey = cloudSlug(titleValue || providerValue || "cloud");
-      document.getElementById("cloudKey").value = makeUniqueCloudKey(baseKey);
     }
 
     function selectedJobKind() {
@@ -1939,154 +2420,6 @@
         editJob(key);
       }
       renderJobs();
-    }
-
-    function parseCloudExtraConfig(text) {
-      const result = {};
-      String(text || "")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .forEach((line) => {
-          const separatorIndex = line.indexOf("=");
-          if (separatorIndex <= 0) return;
-          const key = line.slice(0, separatorIndex).trim();
-          const value = line.slice(separatorIndex + 1).trim();
-          if (key && value) {
-            result[key] = value;
-          }
-        });
-      return result;
-    }
-
-    function formatCloudExtraConfig(extraConfig) {
-      return Object.entries(extraConfig || {})
-        .sort(([left], [right]) => left.localeCompare(right, "ru"))
-        .map(([key, value]) => `${key} = ${value}`)
-        .join("\n");
-    }
-
-    function providerNeedsJsonToken(provider) {
-      return String(provider || "").trim().toLowerCase() === "drive";
-    }
-
-    function looksLikeJsonObject(value) {
-      const text = String(value || "").trim();
-      return text.startsWith("{") && text.endsWith("}");
-    }
-
-    function updateCloudProviderHint() {
-      const hint = document.getElementById("cloudTokenHint");
-      if (!hint) return;
-      const provider = formValue("cloudProvider");
-      hint.textContent = providerNeedsJsonToken(provider)
-        ? "Для `drive` нужен полный OAuth JSON token, а не пароль приложения и не обычная строка."
-        : "Для простых backend сюда можно класть токен или пароль. Для `drive` нужен полный OAuth JSON.";
-    }
-
-    function collectCloudForm() {
-      syncCloudKeyFromTitle();
-      updateCloudProviderHint();
-      return {
-        key: formValue("cloudKey"),
-        title: formValue("cloudTitle"),
-        provider: formValue("cloudProvider") || "generic",
-        remote_name: formValue("cloudRemoteName") || null,
-        username: formValue("cloudUsername") || null,
-        token: formValue("cloudToken") || null,
-        endpoint: formValue("cloudEndpoint") || null,
-        root_path: formValue("cloudRootPath") || null,
-        notes: formValue("cloudNotes") || null,
-        extra_config: parseCloudExtraConfig(formValue("cloudExtraConfig")),
-        enabled: isTogglePressed("cloudEnabled"),
-      };
-    }
-
-    function fillCloudForm(cloud = null) {
-      const editor = document.getElementById("cloudEditor");
-      state.editingCloudKey = cloud?.key || null;
-      editor.hidden = !cloud && !state.creatingNewCloud;
-      document.getElementById("cloudEditorTitle").textContent = cloud
-        ? `Редактирование: ${cloud.display_title || cloud.title || cloud.key}`
-        : "Новое облако";
-      document.getElementById("cloudKey").value = cloud?.key || "";
-      document.getElementById("cloudTitle").value = cloud?.title || "";
-      renderCloudProviderOptions(cloud?.provider || "generic");
-      document.getElementById("cloudRemoteName").value = cloud?.remote_name || "";
-      document.getElementById("cloudUsername").value = cloud?.username || "";
-      document.getElementById("cloudToken").value = cloud?.token || "";
-      document.getElementById("cloudEndpoint").value = cloud?.endpoint || "";
-      document.getElementById("cloudRootPath").value = cloud?.root_path || "";
-      document.getElementById("cloudNotes").value = cloud?.notes || "";
-      document.getElementById("cloudExtraConfig").value = formatCloudExtraConfig(cloud?.extra_config || {});
-      updateCloudProviderHint();
-      setTogglePressed("cloudEnabled", cloud?.enabled ?? true);
-      state.cloudKeyEditedManually = Boolean(cloud?.key);
-      document.getElementById("deleteCloudButton").disabled = !cloud;
-      renderCloudList();
-      refreshAllCustomSelects();
-    }
-
-    function newCloud() {
-      if (state.creatingNewCloud && !document.getElementById("cloudEditor").hidden) {
-        state.creatingNewCloud = false;
-        fillCloudForm(null);
-        return;
-      }
-      state.creatingNewCloud = true;
-      fillCloudForm(null);
-      document.getElementById("cloudEditor").hidden = false;
-      renderCloudProviderOptions("generic");
-      updateCloudProviderHint();
-      setTogglePressed("cloudEnabled", true);
-      state.cloudKeyEditedManually = false;
-      syncCloudKeyFromTitle(true);
-    }
-
-    function editCloud(key) {
-      if (state.editingCloudKey === key) {
-        state.creatingNewCloud = false;
-        fillCloudForm(null);
-        return;
-      }
-      const cloud = state.clouds.find((item) => item.key === key);
-      if (!cloud) return;
-      state.creatingNewCloud = false;
-      fillCloudForm(cloud);
-    }
-
-    function validateCloud(cloud) {
-      if (!cloud.key) throw new Error("Нужен ключ облака");
-      if (!cloud.title) throw new Error("Нужно название облака");
-    }
-
-    function upsertCurrentCloud() {
-      try {
-        const cloud = collectCloudForm();
-        validateCloud(cloud);
-        const existingIndex = state.clouds.findIndex((item) => item.key === cloud.key || item.key === state.editingCloudKey);
-        if (existingIndex >= 0) {
-          state.clouds.splice(existingIndex, 1, cloud);
-        } else {
-          state.clouds.push(cloud);
-        }
-        state.clouds.sort((a, b) => String(a.title || a.key).localeCompare(String(b.title || b.key), "ru"));
-        state.creatingNewCloud = false;
-        fillCloudForm(cloud);
-        setToast(`Облако ${cloud.key} обновлено локально. Теперь сохраните.`, "ok");
-      } catch (error) {
-        setToast(error.message || "Ошибка в форме облака", "error");
-      }
-    }
-
-    function deleteCurrentCloud() {
-      if (!state.editingCloudKey) return;
-      const deletedKey = state.editingCloudKey;
-      state.clouds = state.clouds.filter((cloud) => cloud.key !== deletedKey);
-      state.creatingNewCloud = false;
-      fillCloudForm(null);
-      document.getElementById("cloudEditor").hidden = true;
-      setToast(`Облако ${deletedKey} удалено локально. Теперь сохраните.`, "ok");
     }
 
     function toggleJobEnabled(event, key) {
@@ -2181,6 +2514,10 @@
         state.showQueues = false;
         renderQueuesPanel();
       }
+      if (job && state.showLogging) {
+        state.showLogging = false;
+        renderLoggingPanel();
+      }
       setEditorVisibility(showEditor);
       updateRunsLayout();
       const label = job?.display_title || job?.title || job?.description;
@@ -2199,7 +2536,7 @@
       document.getElementById("jobDestination").value = job?.destination_path || "";
       document.getElementById("jobDestinationPreview").value = job?.destination_path || "";
       document.getElementById("commandList").value = (job?.command || []).join("\n");
-      document.getElementById("jobProfile").value = job?.profile || "standard";
+      renderQueueOptions(job?.profile || getDefaultQueueKey());
       document.getElementById("jobTimeout").value = job?.timeout_seconds || 1800;
       document.getElementById("jobOrder").value = job?.order || nextOrder();
       document.getElementById("scheduleMode").value = job?.schedule?.enabled
@@ -2234,7 +2571,7 @@
       document.getElementById("jobKind").value = "copy";
       state.keyEditedManually = false;
       document.getElementById("jobKey").value = "";
-      document.getElementById("jobProfile").value = "standard";
+      renderQueueOptions(getDefaultQueueKey());
       document.getElementById("jobTimeout").value = 1800;
       document.getElementById("jobOrder").value = nextOrder();
       renderJobCloudOptions("");
@@ -2296,6 +2633,9 @@
     function validateJob(job) {
       if (!job.key) throw new Error("Нужен ключ задачи");
       if (!job.title) throw new Error("Нужен заголовок");
+      if (!queueDefinitions().some((item) => item.key === job.profile && item.enabled !== false)) {
+        throw new Error(`Для задачи ${job.key} выбрана несуществующая или выключенная очередь`);
+      }
       if (job.kind === "backup") {
         if (!job.source_path.startsWith("/")) throw new Error("Source должен быть абсолютным каталогом");
         if (job.cloud_key) {
@@ -2325,6 +2665,7 @@
         }
         state.jobs.sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
         renderJobs();
+        renderQueueLaunchActions();
         fillForm(job);
         setToast(`Задача ${job.key} обновлена локально. Теперь сохраните задачи.`, "ok");
       } catch (error) {
@@ -2343,7 +2684,13 @@
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || "save failed");
         state.jobs = payload.jobs || [];
+        state.queues = payload.queues || state.queues;
+        state.bandwidth = payload.bandwidth || state.bandwidth;
+        state.logging = payload.logging || state.logging;
+        renderBandwidthControl();
+        renderLoggingPanel();
         renderJobs();
+        renderQueuesPanel();
         if (state.editingKey) {
           const updated = state.jobs.find((job) => job.key === state.editingKey);
           fillForm(updated || null);
@@ -2383,7 +2730,25 @@
           allow_parallel_profiles: isTogglePressed("queuesParallelProfiles"),
           allow_scheduler_queueing: isTogglePressed("queuesSchedulerQueueing"),
           allow_event_queueing: isTogglePressed("queuesEventQueueing"),
+          definitions: queueDefinitions().map((item) => ({
+            key: slugifyKey(item.key || item.title || "queue"),
+            title: (item.title || item.key || "").trim() || null,
+            workers: Math.max(1, Number(item.workers || 1)),
+            bandwidth_limit: normalizeBandwidthLimit(item.bandwidth_limit) || null,
+            enabled: item.enabled !== false,
+          })),
         };
+        const seenKeys = new Set();
+        payload.definitions.forEach((item) => {
+          if (!item.key) throw new Error("У очереди нужен ключ");
+          if (seenKeys.has(item.key)) throw new Error(`Дублирующийся ключ очереди: ${item.key}`);
+          seenKeys.add(item.key);
+        });
+        state.jobs.forEach((job) => {
+          if (!seenKeys.has(job.profile)) {
+            throw new Error(`Задача ${job.key} ссылается на отсутствующую очередь ${job.profile}`);
+          }
+        });
         const response = await fetch("/api/queues", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -2393,118 +2758,104 @@
         if (!response.ok) throw new Error(result.detail || "save failed");
         state.queues = result.queues || payload;
         renderQueuesPanel();
+        renderQueueOptions(formValue("jobProfile"));
         setToast("Настройки очередей сохранены.", "ok");
       } catch (error) {
         setToast(error.message || "Ошибка сохранения очередей", "error");
       }
     }
 
-    async function saveClouds() {
+    async function saveBandwidthSettings() {
       try {
-        state.clouds.forEach(validateCloud);
-        const response = await fetch("/api/clouds", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clouds: state.clouds }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.detail || "save failed");
-        state.clouds = result.clouds || [];
-        renderCloudsPanel();
-        renderJobCloudOptions(formValue("jobCloud"));
-        if (state.editingCloudKey) {
-          const updated = state.clouds.find((cloud) => cloud.key === state.editingCloudKey);
-          fillCloudForm(updated || null);
-        }
-        setToast("Настройки облаков сохранены.", "ok");
-      } catch (error) {
-        setToast(error.message || "Ошибка сохранения облаков", "error");
-      }
-    }
-
-    async function importCloudsFromRclone() {
-      try {
-        const response = await fetch("/api/clouds/import-rclone", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.detail || "import failed");
-        state.clouds = result.clouds || [];
-        renderCloudsPanel();
-        renderJobCloudOptions(formValue("jobCloud"));
-        if (state.editingCloudKey) {
-          const updated = state.clouds.find((cloud) => cloud.key === state.editingCloudKey);
-          fillCloudForm(updated || null);
-        }
-        setToast("Облака импортированы из rclone.conf.", "ok");
-      } catch (error) {
-        setToast(error.message || "Ошибка импорта rclone", "error");
-      }
-    }
-
-    async function importCurrentRemote() {
-      try {
-        const remoteName = formValue("cloudRemoteName");
-        if (!remoteName) {
-          throw new Error("Укажите имя remote");
-        }
-        const response = await fetch(`/api/clouds/import-rclone-remote?remote_name=${encodeURIComponent(remoteName)}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.detail || "import failed");
-        const cloud = result.cloud || {};
-        if (!formValue("cloudTitle")) {
-          document.getElementById("cloudTitle").value = cloud.title || remoteName;
-        }
-        if (!formValue("cloudKey")) {
-          state.cloudKeyEditedManually = false;
-          document.getElementById("cloudKey").value = cloud.key || "";
-        }
-        renderCloudProviderOptions(cloud.provider || "generic");
-        document.getElementById("cloudRemoteName").value = cloud.remote_name || remoteName;
-        document.getElementById("cloudUsername").value = cloud.username || "";
-        document.getElementById("cloudToken").value = cloud.token || "";
-        document.getElementById("cloudEndpoint").value = cloud.endpoint || "";
-        document.getElementById("cloudRootPath").value = cloud.root_path || "";
-        document.getElementById("cloudNotes").value = cloud.notes || "";
-        document.getElementById("cloudExtraConfig").value = formatCloudExtraConfig(cloud.extra_config || {});
-        setTogglePressed("cloudEnabled", cloud.enabled ?? true);
-        refreshAllCustomSelects();
-        setToast(`Remote ${remoteName} подтянут из rclone.conf`, "ok");
-      } catch (error) {
-        setToast(error.message || "Ошибка импорта remote", "error");
-      }
-    }
-
-    async function testCloudConnection() {
-      try {
-        const cloud = collectCloudForm();
-        if (providerNeedsJsonToken(cloud.provider) && cloud.token && !looksLikeJsonObject(cloud.token)) {
-          throw new Error("Для drive в поле Token нужен полный OAuth JSON, а не пароль приложения");
-        }
         const payload = {
-          provider: cloud.provider || "generic",
-          remote_name: cloud.remote_name || null,
-          username: cloud.username || null,
-          token: cloud.token || null,
-          endpoint: cloud.endpoint || null,
-          root_path: cloud.root_path || null,
+          limit: normalizeBandwidthLimit(document.getElementById("globalBandwidthLimit").value) || null,
         };
-        const response = await fetch("/api/clouds/test", {
-          method: "POST",
+        const response = await fetch("/api/bandwidth", {
+          method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.detail || "test failed");
-        const mode = result.used_existing_remote ? " Через текущий rclone.conf." : " Через временную конфигурацию.";
-        const suffix = result.output_preview ? " Доступ подтверждён." : " Подключение успешно.";
-        setToast(`Проверка облака прошла для ${result.target}.${suffix}${mode}`, "ok");
+        if (!response.ok) throw new Error(result.detail || "save failed");
+        state.bandwidth = result.bandwidth || payload;
+        renderBandwidthControl();
+        if (!document.getElementById("editorPanel").hidden) {
+          collectFormJob();
+        }
+        setToast(
+          state.bandwidth?.limit
+            ? `Общий лимит скорости сохранён: ${state.bandwidth.limit}. Применится к новым задачам.`
+            : "Общий лимит скорости отключён. Применится к новым задачам.",
+          "ok"
+        );
       } catch (error) {
-        setToast(error.message || "Ошибка проверки облака", "error");
+        setToast(error.message || "Ошибка сохранения лимита скорости", "error");
+      }
+    }
+
+    async function saveLoggingSettings() {
+      try {
+        const payload = {
+          rclone_log_enabled: isTogglePressed("rcloneLogEnabled"),
+        };
+        const response = await fetch("/api/logging", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "save failed");
+        state.logging = result.logging || payload;
+        renderLoggingPanel();
+        setToast(
+          state.logging?.rclone_log_enabled
+            ? "Подробный rclone log включён. Применится к новым задачам."
+            : "Подробный rclone log выключен. Применится к новым задачам.",
+          "ok"
+        );
+      } catch (error) {
+        setToast(error.message || "Ошибка сохранения настроек логирования", "error");
+      }
+    }
+
+    async function showLatestRcloneLog() {
+      try {
+        const lines = Number(document.getElementById("rcloneLogTailLines").value || 100);
+        const response = await fetch(`/api/logging/rclone-tail?lines=${lines}`);
+        const payload = await response.json();
+        if (!response.ok) {
+          const detail = Array.isArray(payload.detail)
+            ? payload.detail.map((item) => item.msg || JSON.stringify(item)).join("; ")
+            : payload.detail;
+          throw new Error(detail || "log tail failed");
+        }
+        if (!payload.available || !payload.content) {
+          setRunDetailToast(`Логов пока нет.\n\nЗапрос: ${lines} строк.`, "muted");
+          return;
+        }
+        const header = `Последний rclone log\nfile=${payload.path}\nlines=${payload.lines}`;
+        setRunDetailToast(`${header}\n\n${payload.content}`, "muted");
+      } catch (error) {
+        setToast(error.message || "Ошибка чтения лога", "error");
+      }
+    }
+
+    async function clearRcloneLogs() {
+      try {
+        const response = await fetch("/api/logging/rclone-log", {
+          method: "DELETE",
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "clear log failed");
+        const files = Number(payload.files || 0);
+        setToast(
+          files > 0
+            ? `Логи rclone очищены: ${files} файл(ов).`
+            : "Логи rclone уже были пустыми.",
+          "ok"
+        );
+      } catch (error) {
+        setToast(error.message || "Ошибка очистки лога", "error");
       }
     }
 
@@ -2545,6 +2896,25 @@
       }
     }
 
+    async function enqueueAllQueues() {
+      const definitions = queueDefinitions().filter((item) => item.enabled !== false);
+      try {
+        for (const item of definitions) {
+          const response = await fetch("/api/runs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ profile: item.key, source: "dashboard", requested_by: "dashboard" })
+          });
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.detail || `request failed for ${item.key}`);
+        }
+        setToast(`Все очереди поставлены в очередь: ${definitions.length}`, "ok");
+        refreshAll();
+      } catch (error) {
+        setToast(error.message || "Ошибка запуска очередей", "error");
+      }
+    }
+
     async function runJobByKey(key) {
       try {
         const response = await fetch(`/api/runs/job/${encodeURIComponent(key)}`, {
@@ -2557,6 +2927,68 @@
         refreshAll();
       } catch (error) {
         setToast(error.message || "Ошибка запуска задачи", "error");
+      }
+    }
+
+    async function clearRunHistory() {
+      try {
+        const response = await fetch("/api/runs", {
+          method: "DELETE",
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "clear history failed");
+        setToast(`История очищена: запусков ${payload.runs_deleted}, шагов ${payload.steps_deleted}`, "ok");
+        refreshAll();
+      } catch (error) {
+        setToast(error.message || "Ошибка очистки истории запусков", "error");
+      }
+    }
+
+    function formatRunStepDetails(step) {
+      const lines = [
+        `run step #${step.step_order} / ${step.job_key}`,
+        `status: ${step.status}`,
+        `kind: ${step.step_kind}`,
+        `description: ${step.description || "-"}`,
+        `exit_code: ${step.exit_code ?? "n/a"}`,
+        `duration: ${typeof step.duration_seconds === "number" ? `${step.duration_seconds.toFixed(2)}s` : "n/a"}`,
+        `started_at: ${step.started_at || "-"}`,
+        `finished_at: ${step.finished_at || "-"}`,
+      ];
+      if (Array.isArray(step.command) && step.command.length) {
+        lines.push("", "command:", step.command.join(" "));
+      }
+      if (step.stderr_tail) {
+        lines.push("", "stderr_tail:", step.stderr_tail);
+      }
+      if (step.stdout_tail) {
+        lines.push("", "stdout_tail:", step.stdout_tail);
+      }
+      return lines.join("\n");
+    }
+
+    async function showRunDetails(runId) {
+      try {
+        const response = await fetch(`/api/runs/${runId}`);
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "run details failed");
+        const run = payload.run || {};
+        const steps = Array.isArray(payload.steps) ? payload.steps : [];
+        const header = [
+          `run #${run.id}`,
+          `status: ${run.status || "-"}`,
+          `profile: ${run.profile || "-"}`,
+          `trigger: ${run.trigger_type || "-"}`,
+          `requested_at: ${run.requested_at || "-"}`,
+          `summary: ${run.summary || "-"}`,
+        ].join("\n");
+        const details = steps.length
+          ? steps.map((step) => formatRunStepDetails(step)).join("\n\n" + "-".repeat(72) + "\n\n")
+          : "Шаги запуска не найдены.";
+        const tone = run.status === "failed" ? "error" : "ok";
+        setRunDetailToast(`${header}\n\n${details}`, tone);
+      } catch (error) {
+        setToast(error.message || "Ошибка загрузки деталей запуска", "error");
       }
     }
 
@@ -2746,6 +3178,7 @@
       const response = await fetch("/api/state");
       const snapshot = await response.json();
       renderStatus(snapshot);
+      renderCopyProgress(snapshot.copy_progress || [], snapshot.active_operations || []);
       renderRuns(snapshot.latest_runs || []);
       updateServiceMessage(snapshot);
       return snapshot;
@@ -2753,28 +3186,24 @@
 
     async function refreshAll() {
       try {
-        const [, jobs, providers] = await Promise.all([
+        const [, jobs] = await Promise.all([
           refreshSnapshot(),
           fetch("/api/jobs"),
-          fetch("/api/rclone/providers"),
         ]);
         const jobsPayload = await jobs.json();
-        const providersPayload = await providers.json();
         state.jobs = jobsPayload.jobs || [];
         state.clouds = jobsPayload.clouds || [];
-        state.providers = providers.ok ? (providersPayload.providers || []) : [];
         renderJobCloudOptions(formValue("jobCloud"));
-        renderCloudProviderOptions(formValue("cloudProvider"));
         state.gotify = jobsPayload.gotify || state.gotify;
         state.queues = jobsPayload.queues || state.queues;
+        state.bandwidth = jobsPayload.bandwidth || state.bandwidth;
+        state.logging = jobsPayload.logging || state.logging;
         renderJobs();
+        renderBandwidthControl();
         renderCloudsPanel();
-        if (state.editingCloudKey) {
-          const currentCloud = state.clouds.find((cloud) => cloud.key === state.editingCloudKey);
-          fillCloudForm(currentCloud || null);
-        }
         renderGotifyPanel();
         renderQueuesPanel();
+        renderLoggingPanel();
         if (!state.editingKey) {
           fillForm(null, { showEditor: state.creatingNewJob });
         } else {
@@ -2794,16 +3223,8 @@
       copyMessagePanelText();
     });
 
-    document.getElementById("cloudTitle").addEventListener("input", () => {
-      syncCloudKeyFromTitle();
-    });
-
     document.getElementById("jobKey").addEventListener("input", (event) => {
       state.keyEditedManually = Boolean(event.target.value.trim());
-    });
-
-    document.getElementById("cloudKey").addEventListener("input", (event) => {
-      state.cloudKeyEditedManually = Boolean(event.target.value.trim());
     });
 
     ["jobSource", "jobDestination", "jobDestinationSubpath", "maxAge", "minAge", "excludeList", "extraArgs", "retentionMinAge", "retentionExcludeList", "retentionExtraArgs", "jobNotifyPriority", "jobNotifyTitle", "commandList"].forEach((id) => {
@@ -2811,11 +3232,8 @@
     });
     document.getElementById("jobCloud").addEventListener("change", () => updateJobKindVisibility());
 
-    ["cloudProvider", "cloudRemoteName", "cloudUsername", "cloudToken", "cloudEndpoint", "cloudRootPath", "cloudNotes", "cloudExtraConfig"].forEach((id) => {
-      document.getElementById(id).addEventListener("input", () => collectCloudForm());
-    });
-
     document.getElementById("jobKind").addEventListener("change", () => updateJobKindVisibility());
+    document.getElementById("globalBandwidthLimit").addEventListener("change", () => saveBandwidthSettings());
 
     document.addEventListener("click", (event) => {
       if (!event.target.closest(".select-shell")) {
@@ -2828,7 +3246,7 @@
     });
 
     bindToggleChip("gotifyEnabled");
-    bindToggleChip("cloudEnabled", () => collectCloudForm());
+    bindToggleChip("rcloneLogEnabled", () => saveLoggingSettings());
     ["queuesParallelProfiles", "queuesSchedulerQueueing", "queuesEventQueueing"].forEach((id) => {
       bindToggleChip(id);
     });
@@ -2862,7 +3280,7 @@
       }
     });
 
-    document.querySelectorAll(".editor select").forEach((select) => initCustomSelect(select));
+    document.querySelectorAll(".editor select, #globalBandwidthLimit").forEach((select) => initCustomSelect(select));
     refreshAll();
     setInterval(() => {
       refreshSnapshot().catch((error) => setToast(error.message || "Ошибка обновления статуса", "error"));

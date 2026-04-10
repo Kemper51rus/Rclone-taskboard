@@ -1,8 +1,8 @@
 # 🚀 Rclone Commander Web GUI
 
-Современная web-панель управления для backup-автоматизации на базе `rclone`.
+Веб-панель для управления backup-задачами на базе `rclone`.
 
-`Rclone Commander Web GUI` переносит orchestration, планирование, наблюдаемость и управление заданиями из shell-скриптов в единое приложение с API, dashboard, очередями и историей запусков. При этом `rclone` остаётся основным механизмом передачи данных.
+`Rclone Commander Web GUI` собирает запуск задач, расписание, очереди, историю и интерфейс управления в одном приложении. Сам перенос данных по-прежнему выполняет `rclone`, а приложение отвечает за координацию, хранение состояния и работу API.
 
 ---
 
@@ -16,7 +16,6 @@
 - [⚙️ Configuration](#️-configuration)
 - [📖 API](#-api)
 - [🧪 Examples](#-examples)
-- [🔐 Безопасность](#-безопасность)
 - [🔄 Миграция с legacy](#-миграция-с-legacy)
 - [❓ FAQ](#-faq)
 - [📘 Документация](#-документация)
@@ -25,46 +24,44 @@
 
 ## ✨ Возможности
 
-- Web dashboard для ручного управления и мониторинга
-- API для запуска, просмотра и настройки backup-задач
-- Отдельные очереди для профилей `standard` и `heavy`
-- Встроенный scheduler для периодических запусков
-- Event-driven запуск через `inotifywait`
-- SQLite-хранилище истории запусков и шагов
-- Редактируемый runtime catalog заданий
-- Поддержка двух режимов развертывания: `docker` и `systemd`
-- Автоматический bootstrap конфигурации при чистом запуске
+- dashboard для ручного управления задачами и наблюдения за состоянием сервиса
+- HTTP API для запуска, просмотра истории и изменения настроек
+- настраиваемые очереди с собственным числом workers и ограничениями скорости
+- встроенный scheduler для периодических запусков
+- запуск по событиям файловой системы через `inotifywait`
+- SQLite для хранения запусков, шагов, событий и служебного состояния
+- редактирование каталога задач через UI и API
+- поддержка развертывания через `docker` и `systemd`
+- автоматическое создание рабочего каталога задач при первом старте
 
 ---
 
 ## 🏗️ Архитектура
 
-Проект использует hybrid-подход:
+Проект устроен так:
 
-- orchestration выполняет приложение
-- фактический перенос данных выполняет `rclone`
-- watcher отправляет события в API
-- scheduler создаёт плановые запуски
-- worker-потоки исполняют задания из очередей
-- SQLite хранит operational state и историю
+- приложение принимает команды из UI, scheduler и watcher
+- `rclone` выполняет копирование и синхронизацию
+- очереди распределяют запуск задач по профилям
+- SQLite хранит историю и текущее состояние
 
 ### Основные компоненты
 
 | Компонент | Назначение |
 | --- | --- |
-| FastAPI app | API, dashboard, точки управления |
+| FastAPI app | API, dashboard и операции управления |
 | Scheduler | Плановые запуски по расписанию |
-| Workers | Исполнение queued runs |
-| Watcher | Отправка filesystem events в API |
-| SQLite | История запусков, шагов, событий и state |
+| Workers | Исполнение задач из очередей |
+| Watcher | Отправка событий файловой системы в API |
+| SQLite | История запусков, шагов, событий и состояние scheduler |
 
 ### Поток выполнения
 
-1. Запуск создаётся scheduler, API, dashboard или watcher.
-2. Профиль помещается в соответствующую очередь.
-3. Worker загружает активные jobs из runtime catalog.
-4. Каждый шаг выполняет `rclone`-команду или другой action.
-5. Результаты сохраняются в SQLite и становятся доступны через API и dashboard.
+1. Запуск создаётся из dashboard, API, scheduler или watcher.
+2. Профиль попадает в нужную очередь.
+3. Worker берёт актуальные задачи из рабочего каталога.
+4. Каждый шаг выполняет `rclone` или shell-команду.
+5. Результаты сохраняются в SQLite и сразу становятся доступны в UI и API.
 
 ---
 
@@ -90,27 +87,27 @@
 
 | Путь | Назначение |
 | --- | --- |
-| `hybrid/backend/app/` | Исходный код backend-приложения |
-| `hybrid/backend/app/jobs/default_jobs.example.json` | Безопасный шаблон catalog |
-| `hybrid/backend/app/jobs/default_jobs.json` | Runtime catalog, создаётся при первом запуске |
-| `hybrid/docker-compose.yml` | Docker stack |
-| `systemd/` | Unit-файлы для host deployment |
-| `scripts/` | Install и migration scripts |
+| `hybrid/backend/app/` | Исходный код backend |
+| `hybrid/backend/app/jobs/default_jobs.example.json` | Шаблон каталога задач |
+| `hybrid/backend/app/jobs/default_jobs.json` | Рабочий каталог задач, создаётся при первом запуске |
+| `hybrid/docker-compose.yml` | Docker-стек |
+| `systemd/` | Unit-файлы для запуска на хосте |
+| `scripts/` | Скрипты установки и миграции |
 
 ---
 
 ## 📦 Installation
 
-Поддерживаются два production-режима развертывания.
+Поддерживаются два варианта развертывания.
 
 ### 🐳 Docker
 
-Используйте этот режим, если нужен self-contained deployment bundle.
+Подходит, если нужно запускать приложение в контейнерах.
 
 #### Требования
 
 - Docker с поддержкой Compose
-- Доступ хоста к:
+- доступ хоста к:
   - `/media`
   - `/srv`
   - `/root/.config/rclone`
@@ -125,12 +122,12 @@ docker compose --env-file .env.docker up -d --build
 
 #### Что запускается
 
-- `hybrid-web` — API, dashboard, scheduler, workers
+- `hybrid-web` — API, dashboard, scheduler и workers
 - `hybrid-watch` — watcher, который отправляет события в API
 
 ### 🖥️ Systemd
 
-Используйте этот режим, если нужен нативный runtime без контейнеров.
+Подходит, если нужен запуск напрямую на хосте без контейнеров.
 
 #### Требования
 
@@ -156,59 +153,64 @@ systemctl enable --now rclone-watch-hybrid.service
 
 После запуска доступны:
 
-- Dashboard: `http://<host>:8080/`
-- Health check: `GET /api/health`
-- Runtime state: `GET /api/state`
+- dashboard: `http://<host>:8080/`
+- проверка сервиса: `GET /api/health`
+- текущее состояние: `GET /api/state`
 
 ### Базовый сценарий работы
 
-1. Поднять приложение через `docker` или `systemd`
-2. Открыть dashboard
-3. Проверить состояние worker-ов и scheduler
-4. Запустить профиль или отдельный job вручную
-5. Просмотреть историю запусков и результаты шагов
+1. Поднять приложение через `docker` или `systemd`.
+2. Открыть dashboard.
+3. Проверить состояние очередей, scheduler и последних запусков.
+4. Запустить профиль или отдельную задачу вручную.
+5. Просмотреть историю запусков и результат шагов.
 
-### Профили
+### Профили по умолчанию
 
 | Профиль | Назначение |
 | --- | --- |
-| `standard` | Короткие и частые задачи |
-| `heavy` | Длинные и ресурсоёмкие задачи |
-| `all` | Агрегированный профиль для полного запуска |
+| `standard` | Частые и короткие задачи |
+| `heavy` | Долгие и ресурсоёмкие задачи |
+| `all` | Сводный запуск всех очередей из UI |
+
+Набор очередей можно менять в настройках. В шаблоне каталога по умолчанию уже есть `standard` и `heavy`.
 
 ---
 
 ## ⚙️ Configuration
 
-Проект использует runtime catalog и env-конфигурацию.
+Проект использует рабочий каталог задач и переменные окружения.
 
 ### Jobs Catalog
 
 | Файл | Назначение |
 | --- | --- |
-| `default_jobs.example.json` | Безопасный шаблон, хранится в Git |
-| `default_jobs.json` | Runtime catalog, создаётся при первом запуске |
+| `default_jobs.example.json` | Шаблон каталога, хранится в Git |
+| `default_jobs.json` | Рабочий каталог, создаётся при первом запуске |
 
-### Что хранится в catalog
+### Что хранится в каталоге
 
 - `profiles`
-- `queues`
 - `gotify`
+- `queues`
+- `bandwidth`
+- `logging`
 - `clouds`
 - `jobs`
 
 ### Что можно настроить
 
-- порядок и состав jobs
-- `copy` или `sync`
+- состав и порядок задач
+- режим передачи: `copy` или `sync`
 - расписание
-- timeout
-- retention
-- cloud settings
-- queue behavior
-- notification settings
+- таймауты
+- retention-политику
+- уведомления Gotify
+- параметры очередей
+- глобальный лимит скорости
+- включение подробного `rclone`-лога
 
-### Bootstrap-поведение
+### Поведение при первом запуске
 
 Если `default_jobs.json` отсутствует, приложение автоматически создаёт его из шаблона:
 
@@ -216,57 +218,82 @@ systemctl enable --now rclone-watch-hybrid.service
 default_jobs.example.json -> default_jobs.json
 ```
 
-Это позволяет хранить репозиторий без environment-specific runtime данных.
-
 ### Основные env-переменные
 
 | Переменная | Назначение |
 | --- | --- |
 | `HYBRID_APP_NAME` | Имя приложения |
-| `APP_ROOT` | Корневой runtime path |
+| `APP_ROOT` | Корневой рабочий каталог |
 | `HYBRID_DB_PATH` | Путь к SQLite |
-| `HYBRID_JOBS_FILE` | Путь к runtime catalog |
+| `HYBRID_JOBS_FILE` | Путь к рабочему каталогу задач |
 | `HYBRID_RCLONE_CONFIG` | Путь к `rclone.conf` |
 | `APP_TIMEZONE` | Таймзона приложения |
 | `HYBRID_ENABLE_SCHEDULER` | Включение scheduler |
 | `HYBRID_STANDARD_INTERVAL_MINUTES` | Интервал стандартных задач |
 | `HYBRID_HEAVY_HOUR` | Час запуска heavy-задач |
-| `HYBRID_EVENT_DEBOUNCE_SECONDS` | Debounce для watcher events |
+| `HYBRID_EVENT_DEBOUNCE_SECONDS` | Окно debounce для watcher |
 | `HYBRID_DEFAULT_TIMEOUT_SECONDS` | Таймаут команд по умолчанию |
 | `HYBRID_OUTPUT_TAIL_CHARS` | Размер сохраняемого tail вывода |
 | `HYBRID_DRY_RUN` | Dry-run режим |
-| `HYBRID_API_TOKEN` | Токен для write endpoints |
+| `HYBRID_API_TOKEN` | Токен для операций записи |
 | `HYBRID_API_URL` | URL API для watcher |
 
 ---
 
 ## 📖 API
 
-### Основные endpoints
+Полное описание вынесено в `docs/04-api-reference.md`. Ниже приведён краткий обзор текущего API без сокращений и устаревших endpoints.
+
+### Dashboard и чтение состояния
 
 | Method | Endpoint | Назначение |
 | --- | --- | --- |
+| `GET` | `/` | HTML dashboard |
 | `GET` | `/api/health` | Проверка доступности сервиса |
-| `GET` | `/api/state` | Состояние runtime, очередей и worker-ов |
-| `GET` | `/api/jobs` | Полный runtime catalog |
+| `GET` | `/api/state` | Состояние сервиса, очередей, workers и последних запусков |
+| `GET` | `/api/jobs` | Полный рабочий каталог |
 | `GET` | `/api/runs` | Список запусков |
 | `GET` | `/api/runs/{run_id}` | Детали запуска и шагов |
+
+### Настройки и справочные данные
+
+| Method | Endpoint | Назначение |
+| --- | --- | --- |
+| `GET` | `/api/gotify` | Текущие настройки Gotify |
+| `GET` | `/api/queues` | Текущие настройки очередей |
+| `GET` | `/api/bandwidth` | Глобальный лимит скорости |
+| `GET` | `/api/logging` | Настройки подробного логирования |
+| `GET` | `/api/logging/rclone-tail` | Хвост последнего `rclone`-лога |
+| `DELETE` | `/api/logging/rclone-log` | Очистка файлов `rclone`-логов |
+| `GET` | `/api/clouds` | Список облаков из `rclone.conf` |
+| `GET` | `/api/fs/browse` | Просмотр доступных директорий |
+
+### Операции записи
+
+| Method | Endpoint | Назначение |
+| --- | --- | --- |
+| `PUT` | `/api/gotify` | Сохранение настроек Gotify |
+| `POST` | `/api/gotify/test` | Тестовое сообщение Gotify |
+| `PUT` | `/api/queues` | Сохранение настроек очередей |
+| `PUT` | `/api/bandwidth` | Сохранение глобального лимита скорости |
+| `PUT` | `/api/logging` | Включение или отключение `rclone`-логов |
+| `PUT` | `/api/backups` | Обновление только backup-задач |
+| `PUT` | `/api/jobs` | Обновление полного каталога задач |
 | `POST` | `/api/runs` | Запуск профиля |
-| `POST` | `/api/runs/job/{job_key}` | Запуск отдельного job |
+| `POST` | `/api/runs/job/{job_key}` | Запуск отдельной задачи |
+| `POST` | `/api/run-steps/{step_id}/control` | Пауза, продолжение или остановка шага |
 | `POST` | `/api/triggers/event` | Приём событий от watcher |
-| `PUT` | `/api/backups` | Обновление backup jobs |
-| `PUT` | `/api/jobs` | Обновление полного каталога |
-| `PUT` | `/api/clouds` | Обновление cloud settings |
-| `PUT` | `/api/gotify` | Обновление Gotify settings |
-| `PUT` | `/api/queues` | Обновление queue settings |
+| `DELETE` | `/api/runs` | Очистка истории запусков |
 
-### Что хранится по каждому шагу
+### Read-only и отключённые cloud endpoints
 
-- status
-- exit code
-- duration
-- stdout tail
-- stderr tail
+Cloud settings теперь берутся напрямую из `rclone.conf`. Поэтому:
+
+- `GET /api/clouds` возвращает актуальный список remotes
+- `PUT /api/clouds` существует, но отвечает `403`
+- `POST /api/clouds/import-rclone` существует, но отвечает `403`
+- `POST /api/clouds/import-rclone-remote` существует, но отвечает `403`
+- `POST /api/clouds/test` существует, но отвечает `403`
 
 ---
 
@@ -280,10 +307,16 @@ curl -X POST http://127.0.0.1:8080/api/runs \
   -d '{"profile":"standard","source":"api","requested_by":"operator"}'
 ```
 
-### Просмотр состояния runtime
+### Просмотр состояния сервиса
 
 ```bash
 curl http://127.0.0.1:8080/api/state
+```
+
+### Получение списка запусков
+
+```bash
+curl 'http://127.0.0.1:8080/api/runs?limit=20'
 ```
 
 ### Отправка filesystem event вручную
@@ -294,7 +327,7 @@ curl -X POST http://127.0.0.1:8080/api/triggers/event \
   -d '{"event_type":"filesystem","path":"/media/photo/immich_library/upload","details":{"event":"close_write"}}'
 ```
 
-### Развертывание через installer script
+### Установка через scripts
 
 ```bash
 ./scripts/install-hybrid-docker.sh /opt/rclone-hybrid
@@ -306,34 +339,15 @@ curl -X POST http://127.0.0.1:8080/api/triggers/event \
 
 ---
 
-## 🔐 Безопасность
-
-### Рекомендуемые практики
-
-- Не хранить `hybrid/.env` в Git
-- Не хранить runtime `default_jobs.json` в Git
-- Не хранить `rclone.conf` внутри репозитория
-- Использовать `HYBRID_API_TOKEN`, если API доступен не только локально
-- Публиковать сервис наружу только через reverse proxy и сетевые ограничения
-
-### Рекомендуемая модель хранения секретов
-
-- `default_jobs.example.json` — в Git
-- `default_jobs.json` — только runtime
-- `hybrid/.env` — только runtime
-- cloud credentials — в `rclone.conf`, env или внешнем secret store
-
----
-
 ## 🔄 Миграция с legacy
 
-Legacy runtime обычно включал:
+Старый runtime обычно включал:
 
 - `rclone-backup.service`
 - `rclone-backup.timer`
 - `rclone-watch.service`
 - `rclone-web.service`
-- shell scripts в `/usr/local/bin`
+- shell-скрипты в `/usr/local/bin`
 
 Для миграции используется:
 
@@ -341,13 +355,13 @@ Legacy runtime обычно включал:
 ./scripts/migrate-legacy-to-hybrid.sh <systemd|docker> [target-root]
 ```
 
-### Что делает migration script
+### Что делает скрипт миграции
 
-1. Сохраняет snapshot legacy-окружения
-2. Экспортирует unit definitions и status output
-3. Копирует legacy runtime artifacts в backup directory
-4. Останавливает и отключает старые unit-ы
-5. Устанавливает hybrid runtime в выбранном режиме
+1. Сохраняет снимок старого окружения.
+2. Экспортирует unit-файлы и вывод `systemctl status`.
+3. Копирует полезные артефакты старого запуска в backup-каталог.
+4. Останавливает и отключает старые unit-ы.
+5. Разворачивает новый hybrid runtime в выбранном режиме.
 
 ### Что попадает в backup snapshot
 
@@ -380,18 +394,18 @@ sudo ./scripts/migrate-legacy-to-hybrid.sh docker /opt/rclone-hybrid
 
 ### Пройдёт ли чистый запуск без `default_jobs.json`?
 
-Да. При первом запуске runtime создаёт `default_jobs.json` из `default_jobs.example.json`.
+Да. При первом запуске приложение создаёт `default_jobs.json` из `default_jobs.example.json`.
 
-### Где должны храниться cloud credentials?
+### Где задаются параметры доступа к облакам?
 
-В `rclone.conf`, env-переменных или внешнем secret storage. Их не следует коммитить в репозиторий.
+Основной источник данных для облаков теперь `rclone.conf`. Интерфейс читает remotes оттуда и не редактирует их напрямую.
 
 ### Что выбрать: `docker` или `systemd`?
 
 | Режим | Когда использовать |
 | --- | --- |
-| `docker` | Если нужен self-contained deployment |
-| `systemd` | Если нужен нативный host runtime |
+| `docker` | Если удобнее контейнерный запуск |
+| `systemd` | Если нужен запуск напрямую на хосте |
 
 ### Что проверять после развертывания?
 
@@ -399,15 +413,17 @@ sudo ./scripts/migrate-legacy-to-hybrid.sh docker /opt/rclone-hybrid
 - `GET /api/state`
 - создание SQLite database
 - создание `default_jobs.json`
-- успешный ручной запуск job-а или профиля
+- успешный ручной запуск задачи или профиля
 
 ---
 
 ## 📘 Документация
 
 - `docs/01-overview.md` — обзор проекта
-- `docs/03-runtime-behavior.md` — runtime behavior
-- `docs/06-hybrid-mvp.md` — configuration
-- `docs/07-deployment.md` — deployment guide
-- `docs/08-legacy-migration.md` — legacy migration guide
-- `hybrid/README.md` — заметки по runtime-каталогу `hybrid/`
+- `docs/03-runtime-behavior.md` — как создаются и исполняются запуски
+- `docs/04-api-reference.md` — полное описание API
+- `docs/06-hybrid-mvp.md` — структура каталога и настройки
+- `docs/07-deployment.md` — развертывание
+- `docs/08-legacy-migration.md` — переход со старого runtime
+- `hybrid/README.md` — заметки по каталогу `hybrid/`
+- `Security.md` — локальные заметки по безопасности, файл игнорируется Git

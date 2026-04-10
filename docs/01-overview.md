@@ -1,16 +1,16 @@
 # 📘 Обзор проекта
 
-`Rclone Commander Web GUI` это self-hosted слой управления для backup-процессов на базе `rclone`. Проект заменяет shell-driven orchestration на структурированный runtime с API, dashboard, scheduler и queue-based workers.
+`Rclone Commander Web GUI` это веб-слой управления для backup-процессов на базе `rclone`. Проект убирает связку shell-скриптов и systemd-юнитов из повседневной работы и переносит запуск задач, очереди, расписание и историю в одно приложение с API и dashboard.
 
 ---
 
 ## 🎯 Цели проекта
 
 - Централизовать управление backup-задачами
-- Разделить orchestration и фактический перенос данных
-- Поддержать schedule-driven и event-driven сценарии
-- Сделать runs и step history наблюдаемыми
-- Подготовить единый production runtime для `docker` и `systemd`
+- Разделить управление задачами и фактический перенос данных
+- Поддержать запуск по расписанию и по событиям
+- Сделать историю запусков и шагов наглядной
+- Подготовить единый runtime для `docker` и `systemd`
 
 ---
 
@@ -20,7 +20,7 @@
 | --- | --- |
 | FastAPI app | API, dashboard, конфигурация |
 | Scheduler | Создание плановых запусков |
-| Worker queues | Исполнение профилей `standard` и `heavy` |
+| Worker queues | Исполнение задач из очередей |
 | Watcher | Передача filesystem events в API |
 | SQLite | Хранение runs, steps, events и state |
 
@@ -28,12 +28,12 @@
 
 ## 🧭 Модель исполнения
 
-Проект использует hybrid-модель:
+Проект использует простую схему:
 
-- orchestration находится в приложении
-- `rclone` остаётся execution engine
-- jobs описываются в runtime catalog
-- watcher больше не запускает systemd units напрямую
+- приложение решает, когда и что запускать
+- `rclone` отвечает только за перенос данных
+- задачи описываются в рабочем каталоге
+- watcher больше не стартует systemd unit-ы напрямую
 
 ---
 
@@ -42,27 +42,27 @@
 | Путь | Назначение |
 | --- | --- |
 | `hybrid/backend/app/` | Исходный код backend |
-| `hybrid/backend/app/jobs/default_jobs.example.json` | Безопасный шаблон catalog |
-| `hybrid/backend/app/jobs/default_jobs.json` | Runtime catalog |
-| `hybrid/docker-compose.yml` | Docker deployment |
-| `systemd/` | Host deployment units |
-| `scripts/` | Install и migration scripts |
+| `hybrid/backend/app/jobs/default_jobs.example.json` | Шаблон каталога задач |
+| `hybrid/backend/app/jobs/default_jobs.json` | Рабочий каталог задач |
+| `hybrid/docker-compose.yml` | Развертывание через Docker |
+| `systemd/` | Unit-файлы для запуска на хосте |
+| `scripts/` | Скрипты установки и миграции |
 
 ---
 
 ## ✅ Что даёт проект
 
-- Dashboard для operational control
-- Ручной запуск профилей и отдельных job-ов
+- Dashboard для управления и просмотра состояния
+- Ручной запуск профилей и отдельных задач
 - Историю запусков с деталями шагов
-- Event-driven и schedule-driven автоматизацию
-- Runtime configuration через catalog и API
+- Автоматизацию по расписанию и по событиям
+- Настройку каталога через UI и API
 
 ---
 
-## 🔐 Источник правды
+## 📌 Рабочий каталог
 
-Активный runtime catalog:
+Основной рабочий файл:
 
 `hybrid/backend/app/jobs/default_jobs.json`
 
@@ -70,4 +70,4 @@
 
 `hybrid/backend/app/jobs/default_jobs.example.json`
 
-Шаблон безопасно хранить в Git. Runtime-файл должен оставаться вне version control.
+Шаблон хранится в Git, а рабочий файл создаётся уже в установленной системе.

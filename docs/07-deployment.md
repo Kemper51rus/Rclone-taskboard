@@ -1,6 +1,6 @@
 # 📦 Deployment
 
-Проект поддерживает два production deployment mode:
+Проект поддерживает два варианта развертывания:
 
 - `docker`
 - `systemd`
@@ -9,7 +9,7 @@
 
 ## 🐳 Docker Deployment
 
-Docker mode запускает два сервиса:
+В Docker-режиме запускаются два сервиса:
 
 - `hybrid-web`
 - `hybrid-watch`
@@ -51,7 +51,7 @@ docker compose --env-file .env.docker up -d --build
 
 ## 🖥️ Systemd Deployment
 
-Systemd mode запускает web service и watcher напрямую на хосте.
+В режиме `systemd` web-сервис и watcher запускаются напрямую на хосте.
 
 ### Требования
 
@@ -96,9 +96,9 @@ systemctl enable --now rclone-watch-hybrid.service
 
 - `GET /api/health`
 - `GET /api/state`
-- ручное создание run
+- ручной запуск профиля или задачи
 - создание SQLite database
-- bootstrap runtime catalog при чистом старте
+- создание `default_jobs.json` при чистом старте
 
 ---
 
@@ -106,5 +106,5 @@ systemctl enable --now rclone-watch-hybrid.service
 
 | Режим | Когда подходит лучше |
 | --- | --- |
-| `docker` | Нужен self-contained deployment bundle |
-| `systemd` | Нужен нативный host runtime и прямая системная интеграция |
+| `docker` | Удобнее контейнерный запуск |
+| `systemd` | Нужна прямая интеграция с системой и запуск на хосте |

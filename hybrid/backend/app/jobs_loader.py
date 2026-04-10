@@ -7,12 +7,16 @@ from typing import Any
 
 from .domain import (
     BackupOptions,
+    BandwidthSettings,
     CloudSettings,
     DEFAULT_RCLONE_ARGS,
+    DEFAULT_QUEUE_DEFINITIONS,
     GotifySettings,
     JobCatalog,
     JobDefinition,
     JobNotificationSettings,
+    LoggingSettings,
+    QueueDefinition,
     QueueSettings,
     RetentionSettings,
     ScheduleDefinition,
@@ -40,6 +44,8 @@ def load_catalog(
     raw_profiles = data.get("profiles", {})
     raw_gotify = data.get("gotify", {})
     raw_queues = data.get("queues", {})
+    raw_bandwidth = data.get("bandwidth", {})
+    raw_logging = data.get("logging", {})
     raw_clouds = data.get("clouds", [])
 
     if not isinstance(raw_jobs, list):
@@ -69,11 +75,21 @@ def load_catalog(
         jobs.append(job)
 
     jobs, migrated = _migrate_retention_commands(jobs)
-    profiles = build_profiles(jobs)
     gotify = _load_gotify_settings(raw_gotify)
     queues = _load_queue_settings(raw_queues)
+    profiles = build_profiles(jobs, queue_keys=queues.queue_keys())
+    bandwidth = _load_bandwidth_settings(raw_bandwidth)
+    logging = _load_logging_settings(raw_logging)
     clouds = _load_clouds(raw_clouds)
-    catalog = JobCatalog(jobs=jobs, profiles=profiles, gotify=gotify, queues=queues, clouds=clouds)
+    catalog = JobCatalog(
+        jobs=jobs,
+        profiles=profiles,
+        gotify=gotify,
+        queues=queues,
+        bandwidth=bandwidth,
+        logging=logging,
+        clouds=clouds,
+    )
     if migrated:
         save_catalog(path, catalog)
     return catalog
@@ -95,18 +111,23 @@ def _bootstrap_catalog_file(path: Path) -> None:
 def save_catalog(path: Path, catalog: JobCatalog) -> None:
     jobs = [job_to_storage_dict(job) for job in catalog.raw_jobs()]
     payload = {
-        "profiles": build_profiles(catalog.raw_jobs()),
+        "profiles": build_profiles(catalog.raw_jobs(), queue_keys=catalog.queues.queue_keys()),
         "gotify": catalog.gotify.to_dict(),
         "queues": catalog.queues.to_dict(),
-        "clouds": [cloud_to_storage_dict(cloud) for cloud in catalog.raw_clouds()],
+        "bandwidth": catalog.bandwidth.to_dict(),
+        "logging": catalog.logging.to_dict(),
+        # Cloud settings are sourced from rclone.conf at runtime and must not be persisted
+        # back into the jobs catalog, otherwise credentials can leak into JSON.
+        "clouds": [],
         "jobs": jobs,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def build_profiles(jobs: list[JobDefinition]) -> dict[str, list[str]]:
-    profiles = {"standard": [], "heavy": [], "all": []}
+def build_profiles(jobs: list[JobDefinition], queue_keys: list[str] | None = None) -> dict[str, list[str]]:
+    profiles = {key: [] for key in (queue_keys or [])}
+    profiles["all"] = []
     for job in sorted(jobs, key=lambda item: (item.order, item.key)):
         profiles["all"].append(job.key)
         profiles.setdefault(job.profile, []).append(job.key)
@@ -262,6 +283,11 @@ def _infer_profile(key: str, profiles: dict[str, list[str]]) -> str:
         return "heavy"
     if key in profiles.get("standard", []):
         return "standard"
+    for profile_name, job_keys in profiles.items():
+        if profile_name == "all":
+            continue
+        if key in job_keys:
+            return profile_name
     return "standard"
 
 
@@ -290,11 +316,47 @@ def _load_notifications(raw: Any) -> JobNotificationSettings:
 
 def _load_queue_settings(raw: Any) -> QueueSettings:
     if not isinstance(raw, dict):
-        return QueueSettings()
+        return QueueSettings(definitions=[definition.normalized() for definition in DEFAULT_QUEUE_DEFINITIONS])
+    raw_definitions = raw.get("definitions", [])
+    definitions: list[QueueDefinition] = []
+    if isinstance(raw_definitions, list):
+        for item in raw_definitions:
+            if not isinstance(item, dict):
+                continue
+            definitions.append(
+                QueueDefinition(
+                    key=str(item.get("key", "")).strip(),
+                    title=item.get("title"),
+                    workers=int(item.get("workers", 1) or 1),
+                    bandwidth_limit=item.get("bandwidth_limit"),
+                    enabled=bool(item.get("enabled", True)),
+                ).normalized()
+            )
     return QueueSettings(
         allow_parallel_profiles=bool(raw.get("allow_parallel_profiles", False)),
         allow_scheduler_queueing=bool(raw.get("allow_scheduler_queueing", False)),
         allow_event_queueing=bool(raw.get("allow_event_queueing", False)),
+        definitions=definitions,
+    ).normalized()
+
+
+def _load_bandwidth_settings(raw: Any) -> BandwidthSettings:
+    if isinstance(raw, str):
+        return BandwidthSettings(limit=raw).normalized()
+    if not isinstance(raw, dict):
+        return BandwidthSettings()
+    return BandwidthSettings(
+        limit=raw.get("limit"),
+    ).normalized()
+
+
+def _load_logging_settings(raw: Any) -> LoggingSettings:
+    if isinstance(raw, bool):
+        return LoggingSettings(rclone_log_enabled=raw).normalized()
+    if not isinstance(raw, dict):
+        return LoggingSettings()
+    return LoggingSettings(
+        rclone_log_enabled=bool(raw.get("rclone_log_enabled", False)),
     ).normalized()
 
 
@@ -428,7 +490,7 @@ _DEFAULT_ARGS_SLICE = [
     "--checkers",
     "8",
     "--stats",
-    "30s",
+    "10s",
     "--stats-one-line",
     "--log-file",
     "/var/log/rclone-backup.log",

@@ -1,6 +1,9 @@
 # Secrets and local environment
 hybrid/.env
 hybrid/backend/app/jobs/default_jobs.json
+Security.md
+docs/Security.md
+hybrid/Security.md
 
 # Sensitive runtime state and logs
 state/
