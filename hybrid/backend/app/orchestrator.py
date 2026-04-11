@@ -25,6 +25,9 @@ from .storage import Storage
 
 logger = logging.getLogger(__name__)
 COPY_LAST_STARTED_AT_STATE_KEY = "copy_last_started_at"
+AUTO_LOG_ENABLED_STATE_PREFIX = "job_auto_rclone_log_enabled:"
+AUTO_LOG_FAILURE_STREAK_STATE_PREFIX = "job_auto_rclone_log_failure_streak:"
+AUTO_LOG_SUCCESS_STREAK_STATE_PREFIX = "job_auto_rclone_log_success_streak:"
 DATA_SIZE_RE = re.compile(r"^([0-9]+(?:[.,][0-9]+)?)\s*([KMGTPE]?i?B)$", re.IGNORECASE)
 RCLONE_LOG_STATS_RE = re.compile(
     r"^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} INFO\s+:\s+(.+?) / (.+?),\s+([0-9-]+)%,\s+([^,]+),\s+ETA\s+(.+?)(?:\s+\(xfr#.*\))?$"
@@ -461,11 +464,15 @@ class Orchestrator:
                 self.storage.mark_run_running(run_id)
                 run_started = True
             self.storage.mark_step_running(step_id)
+            log_mode = self._step_rclone_log_mode(str(step.get("job_key") or ""))
+            self.storage.set_step_log_mode(step_id, log_mode)
 
             command = self._bind_step_rclone_log(
                 command=list(step.get("command", [])),
                 run_id=run_id,
                 step_id=step_id,
+                job_key=str(step.get("job_key") or ""),
+                log_mode=log_mode,
             )
             timeout_seconds = int(step.get("timeout_seconds") or self.settings.default_timeout_seconds)
             result = self.runner.run(
@@ -486,6 +493,7 @@ class Orchestrator:
                 stdout_tail=result.stdout_tail,
                 stderr_tail=result.stderr_tail,
             )
+            self._update_job_auto_rclone_log_state(step=step, status=result.status)
             self._notify_for_step(run=run, step=step, result=result)
 
             completed_steps += 1
@@ -554,11 +562,7 @@ class Orchestrator:
             if not job or job.kind != "backup":
                 continue
             progress = step.get("progress") or {}
-            if (
-                self.catalog.logging.rclone_log_enabled
-                and not progress
-                and step.get("status") == "running"
-            ):
+            if step.get("log_mode") and not progress and step.get("status") == "running":
                 progress = self._read_progress_from_rclone_log(
                     started_at_raw=step.get("started_at"),
                     log_path=self._step_rclone_log_path(
@@ -589,6 +593,8 @@ class Orchestrator:
                     "speed": progress.get("speed"),
                     "eta": progress.get("eta"),
                     "raw_line": progress.get("raw_line"),
+                    "log_step_id": step["id"] if step.get("log_mode") else None,
+                    "log_mode": step.get("log_mode"),
                     "delayed_by_antibot": effective_status == "queued"
                     and self._run_delayed_by_antibot(int(step["run_id"])),
                     "can_pause": effective_status == "running",
@@ -616,10 +622,18 @@ class Orchestrator:
         logs_dir = self.settings.app_root / "data" / "rclone-logs"
         return logs_dir / f"run-{run_id}-step-{step_id}.log"
 
-    def _bind_step_rclone_log(self, command: list[str], run_id: int, step_id: int) -> list[str]:
+    def _bind_step_rclone_log(
+        self,
+        command: list[str],
+        run_id: int,
+        step_id: int,
+        job_key: str | None = None,
+        log_mode: str | None = None,
+    ) -> list[str]:
         if not command or command[0] != "rclone":
             return command
-        if not self.catalog.logging.rclone_log_enabled:
+        effective_log_mode = log_mode if log_mode is not None else self._step_rclone_log_mode(job_key)
+        if effective_log_mode is None:
             updated = []
             skip_next = False
             for index, value in enumerate(command):
@@ -751,6 +765,91 @@ class Orchestrator:
         if factor is None:
             return None
         return amount * factor
+
+    def _step_rclone_log_enabled(self, job_key: str | None) -> bool:
+        return self._step_rclone_log_mode(job_key) is not None
+
+    def _step_rclone_log_mode(self, job_key: str | None) -> str | None:
+        if self.catalog.logging.rclone_log_enabled:
+            return "global"
+        if not self.catalog.logging.auto_rclone_log_enabled:
+            return None
+        normalized_key = str(job_key or "").strip()
+        if not normalized_key:
+            return None
+        return "auto" if self._job_auto_rclone_log_enabled(normalized_key) else None
+
+    def _update_job_auto_rclone_log_state(self, step: dict[str, Any], status: str) -> None:
+        if step.get("step_kind") != "job":
+            return
+        job_key = str(step.get("job_key") or "").strip()
+        if not job_key:
+            return
+        job = self.catalog.get_job(job_key)
+        if not job or job.kind != "backup":
+            return
+        threshold = self.catalog.logging.auto_rclone_log_threshold
+        if status == "failed":
+            failure_streak = self._job_auto_streak(job_key, success=False) + 1
+            self._set_job_auto_streak(job_key, success=False, value=failure_streak)
+            self._set_job_auto_streak(job_key, success=True, value=0)
+            if (
+                self.catalog.logging.auto_rclone_log_enabled
+                and failure_streak >= threshold
+                and not self._job_auto_rclone_log_enabled(job_key)
+            ):
+                self._set_job_auto_rclone_log_enabled(job_key, enabled=True)
+                logger.info(
+                    "enabled auto rclone log for job %s after %s failures",
+                    job_key,
+                    failure_streak,
+                )
+            return
+        if status == "succeeded":
+            success_streak = self._job_auto_streak(job_key, success=True) + 1
+            self._set_job_auto_streak(job_key, success=True, value=success_streak)
+            self._set_job_auto_streak(job_key, success=False, value=0)
+            if (
+                self.catalog.logging.auto_rclone_log_enabled
+                and self._job_auto_rclone_log_enabled(job_key)
+                and success_streak >= threshold
+            ):
+                self._set_job_auto_rclone_log_enabled(job_key, enabled=False)
+                logger.info(
+                    "disabled auto rclone log for job %s after %s successes",
+                    job_key,
+                    success_streak,
+                )
+
+    def _job_auto_rclone_log_enabled(self, job_key: str) -> bool:
+        raw = self.storage.get_state(f"{AUTO_LOG_ENABLED_STATE_PREFIX}{job_key}")
+        return str(raw or "").strip() == "1"
+
+    def _set_job_auto_rclone_log_enabled(self, job_key: str, *, enabled: bool) -> None:
+        self.storage.set_state(
+            f"{AUTO_LOG_ENABLED_STATE_PREFIX}{job_key}",
+            "1" if enabled else "0",
+        )
+
+    def _job_auto_streak(self, job_key: str, *, success: bool) -> int:
+        prefix = (
+            AUTO_LOG_SUCCESS_STREAK_STATE_PREFIX
+            if success
+            else AUTO_LOG_FAILURE_STREAK_STATE_PREFIX
+        )
+        raw = self.storage.get_state(f"{prefix}{job_key}")
+        try:
+            return max(0, int(str(raw or "0").strip()))
+        except ValueError:
+            return 0
+
+    def _set_job_auto_streak(self, job_key: str, *, success: bool, value: int) -> None:
+        prefix = (
+            AUTO_LOG_SUCCESS_STREAK_STATE_PREFIX
+            if success
+            else AUTO_LOG_FAILURE_STREAK_STATE_PREFIX
+        )
+        self.storage.set_state(f"{prefix}{job_key}", str(max(0, int(value))))
 
     def _expand_steps(self, jobs: list[JobDefinition]) -> list[RunStepDefinition]:
         expanded: list[RunStepDefinition] = []

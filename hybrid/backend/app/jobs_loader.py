@@ -365,6 +365,8 @@ def _load_logging_settings(raw: Any) -> LoggingSettings:
         return LoggingSettings()
     return LoggingSettings(
         rclone_log_enabled=bool(raw.get("rclone_log_enabled", False)),
+        auto_rclone_log_enabled=bool(raw.get("auto_rclone_log_enabled", False)),
+        auto_rclone_log_threshold=int(raw.get("auto_rclone_log_threshold", 3) or 3),
     ).normalized()
 
 

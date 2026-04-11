@@ -102,6 +102,12 @@ class Storage:
                     column="progress_updated_at",
                     definition="TEXT",
                 )
+                self._ensure_column(
+                    conn,
+                    table="run_steps",
+                    column="log_mode",
+                    definition="TEXT",
+                )
                 conn.commit()
 
     def create_run(
@@ -270,6 +276,15 @@ class Storage:
                 )
                 conn.commit()
 
+    def set_step_log_mode(self, step_id: int, log_mode: str | None) -> None:
+        with self._lock:
+            with self._connect() as conn:
+                conn.execute(
+                    "UPDATE run_steps SET log_mode = ? WHERE id = ?",
+                    ((str(log_mode).strip() or None) if log_mode is not None else None, step_id),
+                )
+                conn.commit()
+
     def update_step_progress(self, step_id: int, progress: dict[str, Any]) -> None:
         with self._lock:
             with self._connect() as conn:
@@ -346,6 +361,14 @@ class Storage:
                         r.summary,
                         r.error_count,
                         (
+                            SELECT rs.id
+                            FROM run_steps rs
+                            WHERE rs.run_id = r.id
+                              AND rs.log_mode IS NOT NULL
+                            ORDER BY CASE WHEN rs.status = 'failed' THEN 0 ELSE 1 END, rs.step_order ASC
+                            LIMIT 1
+                        ) AS log_step_id,
+                        (
                             SELECT CASE
                                 WHEN COUNT(DISTINCT rs.job_key) = 1 THEN MIN(rs.job_key)
                                 ELSE NULL
@@ -360,7 +383,15 @@ class Storage:
                     """,
                     (limit,),
                 ).fetchall()
-        return [dict(row) for row in rows]
+                items: list[dict[str, Any]] = []
+                for row in rows:
+                    payload = dict(row)
+                    payload["failure_reason"] = self._run_failure_reason(
+                        conn,
+                        run_id=int(payload["id"]),
+                    )
+                    items.append(payload)
+        return items
 
     def clear_run_history(self) -> dict[str, int]:
         with self._lock:
@@ -413,17 +444,26 @@ class Storage:
                 row = conn.execute(
                     """
                     SELECT id, profile, trigger_type, source, requested_by, metadata_json, status,
-                           requested_at, started_at, finished_at, summary, error_count
+                           requested_at, started_at, finished_at, summary, error_count,
+                           (
+                               SELECT rs.id
+                               FROM run_steps rs
+                               WHERE rs.run_id = runs.id
+                                 AND rs.log_mode IS NOT NULL
+                               ORDER BY CASE WHEN rs.status = 'failed' THEN 0 ELSE 1 END, rs.step_order ASC
+                               LIMIT 1
+                           ) AS log_step_id
                     FROM runs
                     WHERE id = ?
                     """,
                     (run_id,),
                 ).fetchone()
-        if row is None:
-            return None
-        payload = dict(row)
-        payload["metadata"] = json.loads(payload.pop("metadata_json") or "{}")
-        return payload
+                if row is None:
+                    return None
+                payload = dict(row)
+                payload["metadata"] = json.loads(payload.pop("metadata_json") or "{}")
+                payload["failure_reason"] = self._run_failure_reason(conn, run_id=run_id)
+                return payload
 
     def get_run_step(self, step_id: int) -> dict[str, Any] | None:
         with self._lock:
@@ -432,7 +472,7 @@ class Storage:
                     """
                     SELECT id, run_id, step_order, job_key, step_kind, description, command_json, timeout_seconds,
                            continue_on_error, status, started_at, finished_at, duration_seconds,
-                           exit_code, progress_json, progress_updated_at, stdout_tail, stderr_tail
+                           exit_code, progress_json, progress_updated_at, stdout_tail, stderr_tail, log_mode
                     FROM run_steps
                     WHERE id = ?
                     """,
@@ -453,7 +493,7 @@ class Storage:
                     """
                     SELECT id, run_id, step_order, job_key, step_kind, description, command_json, timeout_seconds,
                            continue_on_error, status, started_at, finished_at, duration_seconds,
-                           exit_code, progress_json, progress_updated_at, stdout_tail, stderr_tail
+                           exit_code, progress_json, progress_updated_at, stdout_tail, stderr_tail, log_mode
                     FROM run_steps
                     WHERE run_id = ?
                     ORDER BY step_order ASC
@@ -488,6 +528,7 @@ class Storage:
                         rs.exit_code,
                         rs.progress_json,
                         rs.progress_updated_at,
+                        rs.log_mode,
                         r.profile AS run_profile,
                         r.trigger_type AS run_trigger_type,
                         r.status AS run_status,
@@ -503,6 +544,48 @@ class Storage:
         for row in rows:
             payload = dict(row)
             payload["progress"] = json.loads(payload.pop("progress_json") or "null")
+            items.append(payload)
+        return items
+
+    def list_rclone_log_steps(self, limit: int = 200) -> list[dict[str, Any]]:
+        with self._lock:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT
+                        rs.id,
+                        rs.run_id,
+                        rs.step_order,
+                        rs.job_key,
+                        rs.step_kind,
+                        rs.description,
+                        rs.command_json,
+                        rs.status,
+                        rs.started_at,
+                        rs.finished_at,
+                        rs.duration_seconds,
+                        rs.exit_code,
+                        rs.log_mode,
+                        r.profile AS run_profile,
+                        r.trigger_type AS run_trigger_type,
+                        r.status AS run_status,
+                        r.requested_at AS run_requested_at,
+                        r.started_at AS run_started_at,
+                        r.finished_at AS run_finished_at
+                    FROM run_steps rs
+                    JOIN runs r ON r.id = rs.run_id
+                    ORDER BY COALESCE(rs.started_at, r.requested_at) DESC, rs.id DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            payload = dict(row)
+            payload["command"] = json.loads(payload.pop("command_json") or "[]")
+            command = payload.get("command") or []
+            if not command or str(command[0]).strip() != "rclone":
+                continue
             items.append(payload)
         return items
 
@@ -611,6 +694,64 @@ class Storage:
         conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def _run_failure_reason(self, conn: sqlite3.Connection, run_id: int) -> str | None:
+        row = conn.execute(
+            """
+            SELECT job_key, step_kind, status, exit_code, stdout_tail, stderr_tail
+            FROM run_steps
+            WHERE run_id = ?
+              AND status IN ('failed', 'stopped')
+            ORDER BY CASE WHEN status = 'failed' THEN 0 ELSE 1 END, step_order ASC
+            LIMIT 1
+            """,
+            (run_id,),
+        ).fetchone()
+        if row is None:
+            return None
+
+        label = str(row["job_key"] or "").strip() or (
+            "step" if str(row["step_kind"] or "") != "job" else "job"
+        )
+        excerpt = self._tail_excerpt(str(row["stderr_tail"] or "")) or self._tail_excerpt(
+            str(row["stdout_tail"] or "")
+        )
+        if excerpt:
+            return f"{label}: {excerpt}"
+
+        status = str(row["status"] or "").strip()
+        exit_code = row["exit_code"]
+        if status == "failed" and exit_code is not None:
+            return f"{label}: exit code {exit_code}"
+        if status == "stopped":
+            return f"{label}: остановлено"
+        if status:
+            return f"{label}: {status}"
+        return label
+
+    @staticmethod
+    def _tail_excerpt(value: str) -> str | None:
+        if not value:
+            return None
+        lines = [Storage._normalize_tail_line(line) for line in value.splitlines()]
+        lines = [line for line in lines if line]
+        if not lines:
+            return None
+        for line in reversed(lines):
+            if "Transferred:" not in line:
+                return Storage._trim_excerpt(line)
+        return Storage._trim_excerpt(lines[-1])
+
+    @staticmethod
+    def _normalize_tail_line(line: str) -> str:
+        return " ".join(str(line or "").split())
+
+    @staticmethod
+    def _trim_excerpt(value: str, limit: int = 220) -> str:
+        cleaned = str(value or "").strip()
+        if len(cleaned) <= limit:
+            return cleaned
+        return f"{cleaned[: limit - 1].rstrip()}…"
 
     @staticmethod
     def _ensure_column(

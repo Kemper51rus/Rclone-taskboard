@@ -97,6 +97,73 @@ def require_write_access(request: Request) -> None:
     return
 
 
+def _rclone_logs_dir() -> Path:
+    return settings.app_root / "data" / "rclone-logs"
+
+
+def _step_rclone_log_path(run_id: int, step_id: int) -> Path:
+    return _rclone_logs_dir() / f"run-{run_id}-step-{step_id}.log"
+
+
+def _relative_app_path(path: Path) -> str:
+    try:
+        return path.relative_to(settings.app_root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _read_log_tail(path: Path, lines: int) -> str:
+    return "\n".join(path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:])
+
+
+def _is_rclone_step(step: dict[str, Any]) -> bool:
+    command = step.get("command") or []
+    return bool(command) and str(command[0]).strip() == "rclone"
+
+
+def _serialize_rclone_log_item(step: dict[str, Any]) -> dict[str, Any]:
+    run_id = int(step["run_id"])
+    step_id = int(step["id"])
+    log_path = _step_rclone_log_path(run_id=run_id, step_id=step_id)
+    log_exists = log_path.exists() and log_path.is_file()
+    log_stat = log_path.stat() if log_exists else None
+    job_key = str(step.get("job_key") or "").strip()
+    job = catalog.get_job(job_key) if job_key else None
+    title = (
+        (job.title or job.description or job.key)
+        if job
+        else str(step.get("description") or job_key or f"step #{step_id}")
+    )
+    return {
+        "step_id": step_id,
+        "run_id": run_id,
+        "step_order": int(step.get("step_order") or 0),
+        "job_key": job_key or None,
+        "title": title,
+        "description": step.get("description"),
+        "status": step.get("status"),
+        "exit_code": step.get("exit_code"),
+        "profile": step.get("run_profile"),
+        "run_status": step.get("run_status"),
+        "trigger_type": step.get("run_trigger_type"),
+        "requested_at": step.get("run_requested_at"),
+        "run_started_at": step.get("run_started_at"),
+        "run_finished_at": step.get("run_finished_at"),
+        "started_at": step.get("started_at"),
+        "finished_at": step.get("finished_at"),
+        "duration_seconds": step.get("duration_seconds"),
+        "log_mode": step.get("log_mode"),
+        "log_path": _relative_app_path(log_path),
+        "log_available": log_exists,
+        "log_size_bytes": int(log_stat.st_size) if log_stat else 0,
+        "log_updated_at": (
+            datetime.fromtimestamp(log_stat.st_mtime, timezone.utc).isoformat()
+            if log_stat
+            else None
+        ),
+    }
+
+
 class RunCreateRequest(BaseModel):
     profile: str = Field(default="standard")
     source: str = Field(default="api")
@@ -224,6 +291,8 @@ class BandwidthPayload(BaseModel):
 
 class LoggingPayload(BaseModel):
     rclone_log_enabled: bool = False
+    auto_rclone_log_enabled: bool = False
+    auto_rclone_log_threshold: int = Field(default=3, ge=1, le=100)
 
 
 class WatcherPayload(BaseModel):
@@ -460,7 +529,7 @@ def get_watcher_settings() -> dict[str, Any]:
 
 @app.get("/api/logging/rclone-tail")
 def get_rclone_log_tail(lines: int = Query(default=100, ge=1, le=2000)) -> dict[str, Any]:
-    logs_dir = settings.app_root / "data" / "rclone-logs"
+    logs_dir = _rclone_logs_dir()
     if not logs_dir.exists() or not logs_dir.is_dir():
         return {"path": None, "lines": lines, "content": "", "available": False}
 
@@ -470,23 +539,79 @@ def get_rclone_log_tail(lines: int = Query(default=100, ge=1, le=2000)) -> dict[
 
     latest_path = max(candidates, key=lambda path: path.stat().st_mtime)
     try:
-        content = "\n".join(
-            latest_path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:]
-        )
+        content = _read_log_tail(latest_path, lines)
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"failed to read log: {exc}") from exc
 
     return {
-        "path": latest_path.relative_to(settings.app_root).as_posix(),
+        "path": _relative_app_path(latest_path),
         "lines": lines,
         "content": content,
         "available": True,
     }
 
 
+@app.get("/api/logging/rclone-files")
+def list_rclone_log_files(
+    limit: int = Query(default=200, ge=1, le=1000),
+    job_key: str | None = None,
+    status: str | None = None,
+    trigger_type: str | None = None,
+    run_id: int | None = None,
+    only_with_log: bool = False,
+    only_errors: bool = False,
+) -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+    for step in storage.list_rclone_log_steps(limit=limit):
+        item = _serialize_rclone_log_item(step)
+        if job_key and item.get("job_key") != job_key:
+            continue
+        if status and item.get("status") != status:
+            continue
+        if trigger_type and item.get("trigger_type") != trigger_type:
+            continue
+        if run_id is not None and int(item.get("run_id") or 0) != run_id:
+            continue
+        if only_with_log and not item.get("log_available"):
+            continue
+        if only_errors and item.get("status") not in {"failed", "stopped"}:
+            continue
+        items.append(item)
+    return {"logs": items, "count": len(items)}
+
+
+@app.get("/api/logging/rclone-files/{step_id}")
+def get_rclone_log_file(step_id: int) -> dict[str, Any]:
+    step = storage.get_run_step(step_id)
+    if step is None or not _is_rclone_step(step):
+        raise HTTPException(status_code=404, detail="rclone log step not found")
+    path = _step_rclone_log_path(run_id=int(step["run_id"]), step_id=step_id)
+    if not path.exists() or not path.is_file():
+        return {
+            "step_id": step_id,
+            "run_id": int(step["run_id"]),
+            "path": _relative_app_path(path),
+            "content": "",
+            "available": False,
+            "log_mode": step.get("log_mode"),
+        }
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"failed to read log: {exc}") from exc
+    return {
+        "step_id": step_id,
+        "run_id": int(step["run_id"]),
+        "path": _relative_app_path(path),
+        "content": content,
+        "available": True,
+        "log_mode": step.get("log_mode"),
+    }
+
+
 @app.delete("/api/logging/rclone-log", dependencies=[Depends(require_write_access)])
 def clear_rclone_logs() -> dict[str, Any]:
-    logs_dir = settings.app_root / "data" / "rclone-logs"
+    logs_dir = _rclone_logs_dir()
     if not logs_dir.exists() or not logs_dir.is_dir():
         return {"cleared": True, "files": 0}
 
@@ -504,6 +629,26 @@ def clear_rclone_logs() -> dict[str, Any]:
             ) from exc
 
     return {"cleared": True, "files": files_cleared}
+
+
+@app.delete("/api/logging/rclone-files/{step_id}", dependencies=[Depends(require_write_access)])
+def clear_rclone_log_file(step_id: int) -> dict[str, Any]:
+    step = storage.get_run_step(step_id)
+    if step is None or not _is_rclone_step(step):
+        raise HTTPException(status_code=404, detail="rclone log step not found")
+    path = _step_rclone_log_path(run_id=int(step["run_id"]), step_id=step_id)
+    if not path.exists() or not path.is_file():
+        return {"cleared": True, "step_id": step_id, "available": False}
+    try:
+        path.write_text("", encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"failed to clear log: {exc}") from exc
+    return {
+        "cleared": True,
+        "step_id": step_id,
+        "available": True,
+        "path": _relative_app_path(path),
+    }
 
 
 @app.get("/api/clouds")

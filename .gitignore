@@ -14,3 +14,4 @@ hybrid/data/
 hybrid/.venv/
 hybrid/backend/app/__pycache__/
 *.pyc
+ndeep-research-report.mdn

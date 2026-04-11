@@ -28,6 +28,10 @@
       --sans: "Trebuchet MS", "Segoe UI", sans-serif;
     }
     * { box-sizing: border-box; }
+    html {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(124, 224, 255, 0.5) rgba(11, 18, 28, 0.72);
+    }
     body {
       margin: 0;
       min-height: 100vh;
@@ -38,6 +42,51 @@
         radial-gradient(circle at 100% 20%, rgba(150, 255, 218, 0.12), transparent 28%),
         linear-gradient(135deg, #0b1119 0%, #101927 35%, #132132 100%);
       background-attachment: fixed;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(124, 224, 255, 0.5) rgba(11, 18, 28, 0.72);
+    }
+    body::-webkit-scrollbar,
+    .scroll-body::-webkit-scrollbar,
+    .browse-list::-webkit-scrollbar {
+      width: 12px;
+      height: 12px;
+    }
+    body::-webkit-scrollbar-track,
+    .scroll-body::-webkit-scrollbar-track,
+    .browse-list::-webkit-scrollbar-track {
+      background: transparent;
+      border-radius: 999px;
+    }
+    body::-webkit-scrollbar-thumb,
+    .scroll-body::-webkit-scrollbar-thumb,
+    .browse-list::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, rgba(124, 224, 255, 0.62), rgba(150, 255, 218, 0.42));
+      background-clip: padding-box;
+      border: 2px solid transparent;
+      border-radius: 999px;
+      box-shadow: inset 0 0 0 1px rgba(239, 248, 255, 0.06);
+    }
+    body::-webkit-scrollbar-thumb:hover,
+    .scroll-body::-webkit-scrollbar-thumb:hover,
+    .browse-list::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(180deg, rgba(124, 224, 255, 0.78), rgba(150, 255, 218, 0.58));
+    }
+    body::-webkit-scrollbar-corner,
+    .scroll-body::-webkit-scrollbar-corner,
+    .browse-list::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+    .scroll-frame {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(7, 14, 22, 0.58);
+      overflow: hidden;
+    }
+    .scroll-body {
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(124, 224, 255, 0.5) rgba(11, 18, 28, 0.72);
+      scrollbar-gutter: stable both-edges;
     }
     .shell {
       max-width: 1450px;
@@ -138,11 +187,13 @@
       background: linear-gradient(135deg, rgba(124, 224, 255, 0.24), rgba(150, 255, 218, 0.24));
       box-shadow: inset 0 0 0 1px rgba(124, 224, 255, 0.16);
     }
-    .hero-actions > button.has-status-on {
+    .hero-actions > button.has-status-on,
+    button.has-status-on {
       border-color: rgba(151, 255, 63, 0.52);
       box-shadow: inset 0 0 0 1px rgba(151, 255, 63, 0.12);
     }
-    .hero-actions > button.has-status-warning {
+    .hero-actions > button.has-status-warning,
+    button.has-status-warning {
       border-color: rgba(255, 90, 104, 0.75);
       box-shadow: 0 0 0 1px rgba(255, 90, 104, 0.18), inset 0 0 0 1px rgba(255, 90, 104, 0.12);
     }
@@ -614,6 +665,116 @@
       min-height: 38px;
       padding: 8px 14px;
     }
+    .logging-toolbar,
+    .logging-filters,
+    .logging-actions {
+      display: grid;
+      gap: 8px;
+    }
+    .logging-filters {
+      grid-template-columns: minmax(220px, 1.35fr) repeat(2, minmax(150px, 0.8fr));
+      align-items: end;
+    }
+    .logging-actions {
+      grid-template-columns: repeat(5, minmax(0, auto));
+      align-items: center;
+      justify-content: start;
+    }
+    #loggingPanel .field {
+      min-width: 0;
+      margin: 0;
+    }
+    #loggingPanel .field label {
+      margin-bottom: 4px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--soft);
+    }
+    #loggingPanel .select-trigger {
+      min-height: 40px;
+      padding: 10px 38px 10px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+    }
+    #loggingPanel .toggle-chip,
+    #loggingPanel button.secondary {
+      min-height: 40px;
+      padding: 9px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .logging-settings {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: nowrap;
+      width: max-content;
+      max-width: 100%;
+    }
+    .logging-settings .toggle-chip {
+      min-height: 36px;
+      padding: 7px 10px;
+      font-size: 12px;
+    }
+    .logging-threshold {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .logging-threshold label {
+      margin: 0;
+      color: var(--soft);
+      font-size: 11px;
+    }
+    .logging-threshold input {
+      width: 56px;
+      min-width: 56px;
+      min-height: 36px;
+      padding: 7px 10px;
+    }
+    .logging-threshold input:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .logging-list-wrap {
+      background: rgba(7, 14, 22, 0.58);
+    }
+    .logging-list-scroll {
+      max-height: 320px;
+    }
+    .log-browser-row.is-selected td {
+      background: rgba(124, 224, 255, 0.08);
+    }
+    .logging-summary,
+    .logging-viewer-meta {
+      color: var(--soft);
+      font-size: 12px;
+    }
+    .logging-viewer {
+      margin: 0;
+      min-height: 220px;
+      padding: 14px;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      color: var(--text);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .logging-viewer-scroll {
+      max-height: 360px;
+      background: rgba(7, 14, 22, 0.78);
+    }
+    .log-open-link {
+      font-size: 12px;
+      white-space: nowrap;
+    }
     @keyframes copy-progress-scan {
       from { transform: translateX(-110%); }
       to { transform: translateX(260%); }
@@ -638,6 +799,37 @@
     .panel h3 {
       margin: 0;
       font-size: 22px;
+    }
+    #runsPanel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .runs-list-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      background: rgba(7, 14, 22, 0.58);
+    }
+    .runs-list-scroll {
+      max-height: none;
+      height: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    #runsPanel th,
+    #runsPanel td {
+      overflow-wrap: anywhere;
+    }
+    #runsPanel th:nth-child(-n+5),
+    #runsPanel td:nth-child(-n+5) {
+      width: 1%;
+      white-space: nowrap;
+      overflow-wrap: normal;
+    }
+    #runsPanel th:nth-child(6),
+    #runsPanel td:nth-child(6) {
+      width: auto;
+      white-space: normal;
     }
     .jobs-grid {
       display: grid;
@@ -1051,6 +1243,13 @@
       .weekday-grid {
         grid-template-columns: 1fr;
       }
+      .logging-filters,
+      .logging-actions {
+        grid-template-columns: 1fr;
+      }
+      .logging-settings {
+        align-items: stretch;
+      }
       .browse {
         width: 100%;
         max-height: 86vh;
@@ -1082,7 +1281,6 @@
         </div>
         <button id="cloudsToggle" onclick="toggleClouds()">Облака</button>
         <button id="queuesToggle" onclick="toggleQueues()">Очереди</button>
-        <button id="loggingToggle" onclick="toggleLogging()">Логи</button>
         <button id="watcherToggle" onclick="toggleWatcher()">Наблюдатель</button>
         <button id="gotifyToggle" onclick="toggleGotify()">Уведомления</button>
       </div>
@@ -1101,7 +1299,7 @@
 
     <div class="main-grid">
       <div id="leftColumn">
-        <section class="panel">
+        <section class="panel" id="jobsPanel">
           <div class="panel-header">
             <div>
               <h2>Список задач</h2>
@@ -1159,22 +1357,27 @@
               <h3>История запусков</h3>
             </div>
             <div class="row">
+              <button type="button" id="loggingToggle" onclick="toggleLogging()">Логи</button>
               <button type="button" class="secondary" onclick="clearRunHistory()">Очистить</button>
             </div>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Статус</th>
-                <th>Ключ задачи</th>
-                <th>Триггер</th>
-                <th>Запрошен</th>
-                <th>Сводка</th>
-              </tr>
-            </thead>
-            <tbody id="runsBody"></tbody>
-          </table>
+          <div class="runs-list-wrap scroll-frame">
+            <div class="runs-list-scroll scroll-body" id="runsListScroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Статус</th>
+                    <th>Ключ задачи</th>
+                    <th>Триггер</th>
+                    <th>Запрошен</th>
+                    <th>Сводка</th>
+                  </tr>
+                </thead>
+                <tbody id="runsBody"></tbody>
+              </table>
+            </div>
+          </div>
         </section>
         <section class="panel editor" id="editorPanel" hidden>
           <div class="panel-header">
@@ -1383,17 +1586,78 @@
           <div class="token-card" style="padding:0; border:none; background:none;">
             <div>
               <div class="eyebrow">Rclone лог</div>
-              <div class="row" style="align-items:center; gap:10px; flex-wrap:nowrap; width:max-content;">
+              <div class="logging-settings">
                 <button type="button" class="toggle-chip" id="rcloneLogEnabled" aria-pressed="false" style="white-space:nowrap;">Писать лог</button>
-                <button type="button" class="secondary" onclick="clearRcloneLogs()" style="white-space:nowrap;">Очистить лог</button>
+                <button type="button" class="toggle-chip" id="autoRcloneLogEnabled" aria-pressed="false" style="white-space:nowrap;">Авто по ошибкам</button>
+                <div class="logging-threshold">
+                  <label for="autoRcloneLogThreshold">Порог</label>
+                  <input id="autoRcloneLogThreshold" type="number" min="1" max="100" value="3" inputmode="numeric" />
+                </div>
               </div>
             </div>
-            <small>Когда выключено, прогресс берётся из stdout/stderr процесса без `--log-file`. Когда включено, для новых запусков создаются отдельные логи по шагам в `hybrid/backend/data/rclone-logs`.</small>
-            <div class="row" style="margin-top:14px; align-items:center; gap:10px; flex-wrap:nowrap; width:max-content;">
-              <label for="rcloneLogTailLines" style="margin:0;">Строк лога</label>
-              <div class="row" style="align-items:center; gap:10px; flex-wrap:nowrap;">
-                <input id="rcloneLogTailLines" type="number" min="1" max="2000" step="1" value="1" inputmode="numeric" style="width:96px;" />
-                <button class="secondary" onclick="showLatestRcloneLog()">Показать</button>
+            <small>Когда `Писать лог` выключено, прогресс берётся из stdout/stderr процесса без `--log-file`. Когда включено, для новых запусков создаются отдельные логи по шагам в `hybrid/backend/data/rclone-logs`. `Авто по ошибкам` включает step-логи для backup-задачи после заданного числа подряд ошибок и выключает их после такого же числа подряд успешных запусков.</small>
+            <div class="logging-toolbar">
+              <div class="logging-filters">
+                <div class="field">
+                  <label for="rcloneLogFilterJob">Задача</label>
+                  <select id="rcloneLogFilterJob">
+                    <option value="">Все задачи</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="rcloneLogFilterStatus">Статус</label>
+                  <select id="rcloneLogFilterStatus">
+                    <option value="">Все статусы</option>
+                    <option value="running">running</option>
+                    <option value="queued">queued</option>
+                    <option value="paused">paused</option>
+                    <option value="succeeded">succeeded</option>
+                    <option value="failed">failed</option>
+                    <option value="stopped">stopped</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="rcloneLogFilterTrigger">Триггер</label>
+                  <select id="rcloneLogFilterTrigger">
+                    <option value="">Все триггеры</option>
+                    <option value="manual">вручную</option>
+                    <option value="schedule">планировщик</option>
+                    <option value="event">наблюдатель</option>
+                  </select>
+                </div>
+              </div>
+              <div class="logging-actions">
+                <button type="button" class="toggle-chip" id="rcloneLogOnlyWithFiles" aria-pressed="true">Только с логом</button>
+                <button type="button" class="toggle-chip" id="rcloneLogOnlyErrors" aria-pressed="false">Только ошибки</button>
+                <button class="secondary" type="button" onclick="refreshRcloneLogs()">Обновить список</button>
+                <button class="secondary" type="button" id="clearSelectedRcloneLogButton" onclick="clearSelectedRcloneLog()">Очистить выбранный</button>
+                <button class="secondary" type="button" onclick="clearRcloneLogs()">Очистить все</button>
+              </div>
+            </div>
+            <div class="logging-summary" id="rcloneLogsSummary">Логи ещё не загружались.</div>
+            <div class="logging-list-wrap scroll-frame">
+              <div class="logging-list-scroll scroll-body">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Время</th>
+                      <th>Задача</th>
+                      <th>Run</th>
+                      <th>Шаг</th>
+                      <th>Статус</th>
+                      <th>Режим</th>
+                      <th>Размер</th>
+                      <th>Лог</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rcloneLogsBody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="logging-viewer-meta" id="rcloneLogViewerMeta">Выбери строку лога для просмотра.</div>
+            <div class="logging-viewer-frame scroll-frame">
+              <div class="logging-viewer-scroll scroll-body">
+                <pre class="logging-viewer" id="rcloneLogViewer">Лог не выбран.</pre>
               </div>
             </div>
           </div>
@@ -1484,7 +1748,10 @@
       gotify: { enabled: false, url: "", token: "", default_priority: 5 },
       queues: { allow_parallel_profiles: false, allow_scheduler_queueing: false, allow_event_queueing: false, definitions: [] },
       bandwidth: { limit: null },
-      logging: { rclone_log_enabled: false },
+      logging: { rclone_log_enabled: false, auto_rclone_log_enabled: false, auto_rclone_log_threshold: 3 },
+      rcloneLogs: [],
+      selectedRcloneLogStepId: null,
+      selectedRcloneLogDetail: null,
       watcher: { enabled: false, debounce_seconds: 45 },
       watcherRuntime: { component_running: false, observer_running: false, configured_jobs: 0, active_jobs: 0, jobs: [], active_paths: [] },
       selectedQueueKey: null,
@@ -1958,6 +2225,7 @@
               <strong>${escapeHtml(progressValue)}</strong>
             </div>
             <div class="copy-progress-actions">
+              ${item.log_step_id ? `<button type="button" class="secondary" onclick="openRcloneLog(${item.log_step_id})">Лог</button>` : ""}
               <button type="button" class="secondary" onclick="controlCopyStep(${item.step_id}, 'pause')" ${item.can_pause ? "" : "disabled"}>Пауза</button>
               <button type="button" class="secondary" onclick="controlCopyStep(${item.step_id}, 'resume')" ${item.can_resume ? "" : "disabled"}>Плей</button>
               <button type="button" class="ghost" onclick="controlCopyStep(${item.step_id}, 'stop')" ${item.can_stop ? "" : "disabled"}>Стоп</button>
@@ -2000,6 +2268,32 @@
       if (runsPanel.parentElement !== target) {
         target.appendChild(runsPanel);
       }
+      updateRunsPanelHeight();
+    }
+
+    function updateRunsPanelHeight() {
+      const jobsPanel = document.getElementById("jobsPanel");
+      const runsPanel = document.getElementById("runsPanel");
+      const rightSlot = document.getElementById("historySlotRight");
+      if (!jobsPanel || !runsPanel || !rightSlot) return;
+
+      const isDesktopLayout = window.innerWidth > 1100;
+      const isRightAligned = runsPanel.parentElement === rightSlot;
+      if (!isDesktopLayout || !isRightAligned) {
+        runsPanel.style.height = "";
+        runsPanel.dataset.constrained = "false";
+        return;
+      }
+
+      const jobsHeight = Math.round(jobsPanel.getBoundingClientRect().height);
+      if (!Number.isFinite(jobsHeight) || jobsHeight <= 0) {
+        runsPanel.style.height = "";
+        runsPanel.dataset.constrained = "false";
+        return;
+      }
+
+      runsPanel.style.height = `${Math.max(280, jobsHeight)}px`;
+      runsPanel.dataset.constrained = "true";
     }
 
     function renderCloudList() {
@@ -2493,9 +2787,17 @@
     function renderLoggingPanel() {
       const panel = document.getElementById("loggingPanel");
       const toggle = document.getElementById("loggingToggle");
+      const autoThresholdInput = document.getElementById("autoRcloneLogThreshold");
       panel.hidden = !state.showLogging;
       toggle.classList.toggle("is-active", state.showLogging);
       setTogglePressed("rcloneLogEnabled", Boolean(state.logging?.rclone_log_enabled));
+      setTogglePressed("autoRcloneLogEnabled", Boolean(state.logging?.auto_rclone_log_enabled));
+      autoThresholdInput.value = String(Math.max(1, Number(state.logging?.auto_rclone_log_threshold || 3)));
+      autoThresholdInput.disabled = !Boolean(state.logging?.auto_rclone_log_enabled);
+      populateRcloneLogJobFilter();
+      refreshCustomSelect("rcloneLogFilterStatus");
+      refreshCustomSelect("rcloneLogFilterTrigger");
+      renderRcloneLogBrowser();
       renderHeroStatusIndicators();
       updateRunsLayout();
     }
@@ -2622,6 +2924,165 @@
       valueNode.textContent = item.value;
     }
 
+    function formatRcloneLogMode(mode) {
+      const normalized = String(mode || "").trim().toLowerCase();
+      if (normalized === "global") return "ручной";
+      if (normalized === "auto") return "auto";
+      return "—";
+    }
+
+    function formatFileSize(bytes) {
+      const value = Number(bytes || 0);
+      if (!Number.isFinite(value) || value <= 0) return "0 Б";
+      if (value >= 1000 ** 2) {
+        const amount = value / (1000 ** 2);
+        return `${amount.toFixed(amount >= 100 ? 0 : 2).replace(".", ",")} МБ`;
+      }
+      if (value >= 1000) {
+        const amount = value / 1000;
+        return `${amount.toFixed(amount >= 100 ? 0 : 2).replace(".", ",")} КБ`;
+      }
+      return `${Math.round(value)} Б`;
+    }
+
+    function openLoggingPanel() {
+      closeJobEditor();
+      state.showClouds = false;
+      state.showGotify = false;
+      state.showQueues = false;
+      state.showWatcher = false;
+      renderCloudsPanel();
+      renderGotifyPanel();
+      renderQueuesPanel();
+      renderWatcherPanel();
+      state.showLogging = true;
+      renderLoggingPanel();
+    }
+
+    function currentRcloneLogFilterValue(id) {
+      const node = document.getElementById(id);
+      return node ? String(node.value || "") : "";
+    }
+
+    function filteredRcloneLogs() {
+      const jobKey = currentRcloneLogFilterValue("rcloneLogFilterJob");
+      const status = currentRcloneLogFilterValue("rcloneLogFilterStatus");
+      const triggerType = currentRcloneLogFilterValue("rcloneLogFilterTrigger");
+      const onlyWithFiles = isTogglePressed("rcloneLogOnlyWithFiles");
+      const onlyErrors = isTogglePressed("rcloneLogOnlyErrors");
+      return (Array.isArray(state.rcloneLogs) ? state.rcloneLogs : []).filter((item) => {
+        if (jobKey && String(item.job_key || "") !== jobKey) return false;
+        if (status && String(item.status || "") !== status) return false;
+        if (triggerType && String(item.trigger_type || "") !== triggerType) return false;
+        if (onlyWithFiles && !item.log_available) return false;
+        if (onlyErrors && !["failed", "stopped"].includes(String(item.status || ""))) return false;
+        return true;
+      });
+    }
+
+    function populateRcloneLogJobFilter() {
+      const select = document.getElementById("rcloneLogFilterJob");
+      if (!select) return;
+      const current = String(select.value || "");
+      const options = new Map();
+      (Array.isArray(state.rcloneLogs) ? state.rcloneLogs : []).forEach((item) => {
+        const key = String(item.job_key || "").trim();
+        if (!key) return;
+        options.set(key, String(item.title || item.job_key || key));
+      });
+      const markup = ['<option value="">Все задачи</option>'];
+      [...options.entries()]
+        .sort((left, right) => left[1].localeCompare(right[1], "ru"))
+        .forEach(([value, label]) => {
+          markup.push(`<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`);
+        });
+      select.innerHTML = markup.join("");
+      if (options.has(current)) {
+        select.value = current;
+      }
+      refreshCustomSelect(select);
+    }
+
+    function renderRcloneLogBrowser() {
+      const summary = document.getElementById("rcloneLogsSummary");
+      const body = document.getElementById("rcloneLogsBody");
+      const viewerMeta = document.getElementById("rcloneLogViewerMeta");
+      const viewer = document.getElementById("rcloneLogViewer");
+      const clearButton = document.getElementById("clearSelectedRcloneLogButton");
+      if (!summary || !body || !viewerMeta || !viewer || !clearButton) return;
+
+      const filtered = filteredRcloneLogs();
+      const total = Array.isArray(state.rcloneLogs) ? state.rcloneLogs.length : 0;
+      summary.textContent = total
+        ? `Показано ${filtered.length} из ${total} log-step записей.`
+        : "Логов пока нет.";
+
+      if (!filtered.length) {
+        body.innerHTML = '<tr><td colspan="8" class="empty">По текущим фильтрам логов нет.</td></tr>';
+      } else {
+        body.innerHTML = filtered.map((item) => `
+          <tr class="log-browser-row ${Number(item.step_id) === Number(state.selectedRcloneLogStepId) ? "is-selected" : ""}">
+            <td>${formatMetricTimestamp(item.started_at || item.requested_at || item.log_updated_at)}</td>
+            <td>${escapeHtml(item.title || item.job_key || "job")}</td>
+            <td>#${escapeHtml(String(item.run_id || ""))}</td>
+            <td>${escapeHtml(String(item.step_order || ""))}</td>
+            <td class="${statusClass(item.status)}">${escapeHtml(String(item.status || ""))}</td>
+            <td>${escapeHtml(formatRcloneLogMode(item.log_mode))}</td>
+            <td>${escapeHtml(formatFileSize(item.log_size_bytes))}</td>
+            <td><button type="button" class="run-link log-open-link" onclick="openRcloneLog(${item.step_id})">${item.log_available ? "Открыть" : "Выбрать"}</button></td>
+          </tr>
+        `).join("");
+      }
+
+      const selected = (Array.isArray(state.rcloneLogs) ? state.rcloneLogs : []).find(
+        (item) => Number(item.step_id) === Number(state.selectedRcloneLogStepId)
+      ) || null;
+      const detail = state.selectedRcloneLogDetail && Number(state.selectedRcloneLogDetail.step_id) === Number(state.selectedRcloneLogStepId)
+        ? state.selectedRcloneLogDetail
+        : null;
+
+      clearButton.disabled = !selected;
+
+      if (!selected) {
+        viewerMeta.textContent = "Выбери строку лога для просмотра tail.";
+        viewer.textContent = "Лог не выбран.";
+        return;
+      }
+
+      viewerMeta.textContent = [
+        selected.title || selected.job_key || `step #${selected.step_id}`,
+        `run #${selected.run_id}`,
+        `step #${selected.step_order}`,
+        selected.log_path || "",
+      ].filter(Boolean).join(" • ");
+
+      if (!detail) {
+        viewer.textContent = selected.log_available
+          ? "Загружается лог..."
+          : "Для выбранного шага файл лога пока отсутствует.";
+        return;
+      }
+
+      viewer.textContent = detail.available
+        ? (detail.content || "Файл лога пуст.")
+        : "Файл лога для выбранного шага сейчас отсутствует.";
+    }
+
+    function runHistorySummary(run) {
+      const failureReason = String(run?.failure_reason || "").trim();
+      if (String(run?.status || "") === "failed" && failureReason) return failureReason;
+      return String(run?.summary || "").trim();
+    }
+
+    function runHistorySummaryTooltip(run) {
+      const failureReason = String(run?.failure_reason || "").trim();
+      const summary = String(run?.summary || "").trim();
+      const parts = [];
+      if (failureReason) parts.push(`Причина: ${failureReason}`);
+      if (summary && summary !== failureReason) parts.push(`Сводка: ${summary}`);
+      return parts.join(" ");
+    }
+
     function renderRuns(runs) {
       document.getElementById("runsBody").innerHTML = runs.map((run) => `
         <tr>
@@ -2630,7 +3091,10 @@
           <td>${escapeHtml(run.job_key || "—")}</td>
           <td>${escapeHtml(formatTriggerLabel(run))}</td>
           <td>${formatRunTimestamp(run.requested_at)}</td>
-          <td>${run.summary || ""}</td>
+          <td class="ui-tooltip${runHistorySummaryTooltip(run) ? " has-tooltip" : ""}"${runHistorySummaryTooltip(run) ? ` data-tooltip="${escapeHtml(runHistorySummaryTooltip(run))}" tabindex="0"` : ""}>
+            <span>${escapeHtml(runHistorySummary(run))}</span>
+            ${run.log_step_id ? `<button type="button" class="run-link log-open-link" onclick="openRcloneLog(${run.log_step_id})">лог</button>` : ""}
+          </td>
         </tr>
       `).join("");
     }
@@ -2673,6 +3137,14 @@
         return Math.max(1, Number(fallback) || 45);
       }
       return Math.max(1, Math.round(parsed));
+    }
+
+    function normalizeAutoRcloneLogThreshold(value, fallback = 3) {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) {
+        return Math.max(1, Math.min(100, Number(fallback) || 3));
+      }
+      return Math.max(1, Math.min(100, Math.round(parsed)));
     }
 
     function applyPreviewBwlimit(args) {
@@ -2718,6 +3190,7 @@
       const container = document.getElementById("jobsGrid");
       if (!state.jobs.length) {
         container.innerHTML = `<div class="empty">В каталоге пока нет задач. Добавьте первую справа.</div>`;
+        updateRunsPanelHeight();
         return;
       }
       container.innerHTML = state.jobs.map((job) => `
@@ -2740,6 +3213,7 @@
           </div>
         </article>
       `).join("");
+      updateRunsPanelHeight();
     }
 
     function closeJobEditor() {
@@ -2799,15 +3273,9 @@
     function toggleLogging() {
       state.showLogging = !state.showLogging;
       if (state.showLogging) {
-        closeJobEditor();
-        state.showClouds = false;
-        renderCloudsPanel();
-        state.showGotify = false;
-        renderGotifyPanel();
-        state.showQueues = false;
-        renderQueuesPanel();
-        state.showWatcher = false;
-        renderWatcherPanel();
+        openLoggingPanel();
+        refreshRcloneLogs({ silent: true }).catch((error) => setToast(error.message || "Ошибка загрузки логов", "error"));
+        return;
       }
       renderLoggingPanel();
     }
@@ -3370,8 +3838,14 @@
 
     async function saveLoggingSettings() {
       try {
+        const autoThreshold = normalizeAutoRcloneLogThreshold(
+          document.getElementById("autoRcloneLogThreshold").value,
+          state.logging?.auto_rclone_log_threshold || 3
+        );
         const payload = {
           rclone_log_enabled: isTogglePressed("rcloneLogEnabled"),
+          auto_rclone_log_enabled: isTogglePressed("autoRcloneLogEnabled"),
+          auto_rclone_log_threshold: autoThreshold,
         };
         const response = await fetch("/api/logging", {
           method: "PUT",
@@ -3381,11 +3855,12 @@
         const result = await response.json();
         if (!response.ok) throw new Error(result.detail || "save failed");
         state.logging = result.logging || payload;
+        document.getElementById("autoRcloneLogThreshold").value = String(
+          normalizeAutoRcloneLogThreshold(state.logging?.auto_rclone_log_threshold || autoThreshold)
+        );
         renderLoggingPanel();
         setToast(
-          state.logging?.rclone_log_enabled
-            ? "Подробный rclone log включён. Применится к новым задачам."
-            : "Подробный rclone log выключен. Применится к новым задачам.",
+          `Настройки логов сохранены: ручной лог ${state.logging?.rclone_log_enabled ? "включён" : "выключен"}, авто по ошибкам ${state.logging?.auto_rclone_log_enabled ? `включён, порог ${state.logging?.auto_rclone_log_threshold}` : "выключен"}.`,
           "ok"
         );
       } catch (error) {
@@ -3437,25 +3912,78 @@
       }, delayMs);
     }
 
-    async function showLatestRcloneLog() {
+    async function refreshRcloneLogs({ silent = false, selectedStepId = null } = {}) {
       try {
-        const lines = Number(document.getElementById("rcloneLogTailLines").value || 100);
-        const response = await fetch(`/api/logging/rclone-tail?lines=${lines}`);
+        const response = await fetch("/api/logging/rclone-files?limit=500");
         const payload = await response.json();
-        if (!response.ok) {
-          const detail = Array.isArray(payload.detail)
-            ? payload.detail.map((item) => item.msg || JSON.stringify(item)).join("; ")
-            : payload.detail;
-          throw new Error(detail || "log tail failed");
+        if (!response.ok) throw new Error(payload.detail || "log list failed");
+        state.rcloneLogs = Array.isArray(payload.logs) ? payload.logs : [];
+        if (selectedStepId !== null) {
+          state.selectedRcloneLogStepId = selectedStepId;
+          state.selectedRcloneLogDetail = null;
+        } else if (
+          state.selectedRcloneLogStepId !== null
+          && !state.rcloneLogs.some((item) => Number(item.step_id) === Number(state.selectedRcloneLogStepId))
+        ) {
+          state.selectedRcloneLogStepId = null;
+          state.selectedRcloneLogDetail = null;
         }
-        if (!payload.available || !payload.content) {
-          setRunDetailToast(`Логов пока нет.\n\nЗапрос: ${lines} строк.`, "muted");
-          return;
+        renderLoggingPanel();
+        if (!silent) {
+          setToast(`Список логов обновлён: ${Number(payload.count || state.rcloneLogs.length || 0)}.`, "ok");
         }
-        const header = `Последний rclone log\nfile=${payload.path}\nlines=${payload.lines}`;
-        setRunDetailToast(`${header}\n\n${payload.content}`, "muted");
+      } catch (error) {
+        if (!silent) {
+          setToast(error.message || "Ошибка загрузки логов", "error");
+        }
+        throw error;
+      }
+    }
+
+    async function openRcloneLog(stepId, { openPanel = true, loadList = true } = {}) {
+      try {
+        if (openPanel) {
+          openLoggingPanel();
+        }
+        const normalizedStepId = Number(stepId);
+        if (!Number.isFinite(normalizedStepId) || normalizedStepId <= 0) {
+          throw new Error("invalid log step");
+        }
+        if (loadList) {
+          await refreshRcloneLogs({ silent: true, selectedStepId: normalizedStepId });
+        } else {
+          state.selectedRcloneLogStepId = normalizedStepId;
+          renderLoggingPanel();
+        }
+        const response = await fetch(`/api/logging/rclone-files/${normalizedStepId}`);
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "log tail failed");
+        state.selectedRcloneLogDetail = payload;
+        renderLoggingPanel();
+        if (openPanel) {
+          document.getElementById("loggingPanel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
       } catch (error) {
         setToast(error.message || "Ошибка чтения лога", "error");
+      }
+    }
+
+    async function clearSelectedRcloneLog() {
+      if (!state.selectedRcloneLogStepId) {
+        setToast("Сначала выбери лог в таблице.", "error");
+        return;
+      }
+      try {
+        const response = await fetch(`/api/logging/rclone-files/${state.selectedRcloneLogStepId}`, {
+          method: "DELETE",
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "clear log failed");
+        state.selectedRcloneLogDetail = null;
+        await refreshRcloneLogs({ silent: true, selectedStepId: state.selectedRcloneLogStepId });
+        setToast("Выбранный лог очищен.", "ok");
+      } catch (error) {
+        setToast(error.message || "Ошибка очистки лога", "error");
       }
     }
 
@@ -3467,6 +3995,8 @@
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || "clear log failed");
         const files = Number(payload.files || 0);
+        state.selectedRcloneLogDetail = null;
+        await refreshRcloneLogs({ silent: true });
         setToast(
           files > 0
             ? `Логи rclone очищены: ${files} файл(ов).`
@@ -3599,6 +4129,7 @@
           `profile: ${run.profile || "-"}`,
           `trigger: ${formatTriggerLabel(run)}`,
           `requested_at: ${run.requested_at || "-"}`,
+          `failure_reason: ${run.failure_reason || "-"}`,
           `summary: ${run.summary || "-"}`,
         ].join("\n");
         const details = steps.length
@@ -3801,6 +4332,9 @@
       renderStatus(snapshot);
       renderCopyProgress(snapshot.copy_progress || [], snapshot.active_operations || []);
       renderRuns(snapshot.latest_runs || []);
+      if (state.showLogging) {
+        refreshRcloneLogs({ silent: true }).catch(() => {});
+      }
       renderWatcherPanel();
       updateServiceMessage(snapshot);
       return snapshot;
@@ -3872,13 +4406,18 @@
       state.watcher = { ...state.watcher, debounce_seconds: normalized };
       scheduleWatcherAutoSave(0);
     });
-
+    ["rcloneLogFilterJob", "rcloneLogFilterStatus", "rcloneLogFilterTrigger"].forEach((id) => {
+      document.getElementById(id).addEventListener("change", () => renderLoggingPanel());
+    });
     document.addEventListener("click", (event) => {
       if (!event.target.closest(".select-shell")) {
         closeCustomSelects();
       }
     });
-    window.addEventListener("resize", () => syncQueuesPanelMenuSpacer());
+    window.addEventListener("resize", () => {
+      syncQueuesPanelMenuSpacer();
+      updateRunsPanelHeight();
+    });
 
     ["retentionEnabled", "jobNotifySuccess", "jobNotifyFailure", "jobWatcherEnabled"].forEach((id) => {
       bindToggleChip(id, () => collectFormJob());
@@ -3891,6 +4430,9 @@
       saveWatcherSettings();
     });
     bindToggleChip("rcloneLogEnabled", () => saveLoggingSettings());
+    bindToggleChip("autoRcloneLogEnabled", () => saveLoggingSettings());
+    bindToggleChip("rcloneLogOnlyWithFiles", () => renderLoggingPanel());
+    bindToggleChip("rcloneLogOnlyErrors", () => renderLoggingPanel());
     bindToggleChip("queuesParallelProfiles", (next) => {
       state.queues = { ...state.queues, allow_parallel_profiles: next };
       saveQueueSettings({ silent: true, rerender: false });
@@ -3933,7 +4475,22 @@
       }
     });
 
-    document.querySelectorAll(".editor select, #globalBandwidthLimit").forEach((select) => initCustomSelect(select));
+    document.getElementById("autoRcloneLogThreshold").addEventListener("change", (event) => {
+      const normalized = normalizeAutoRcloneLogThreshold(
+        event.target.value,
+        state.logging?.auto_rclone_log_threshold || 3
+      );
+      event.target.value = normalized;
+      saveLoggingSettings();
+    });
+    document.getElementById("autoRcloneLogThreshold").addEventListener("blur", (event) => {
+      event.target.value = normalizeAutoRcloneLogThreshold(
+        event.target.value,
+        state.logging?.auto_rclone_log_threshold || 3
+      );
+    });
+
+    document.querySelectorAll(".editor select, #globalBandwidthLimit, #loggingPanel select").forEach((select) => initCustomSelect(select));
     refreshAll();
     setInterval(() => {
       refreshAntiBotMetric();

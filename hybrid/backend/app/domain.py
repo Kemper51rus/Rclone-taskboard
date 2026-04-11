@@ -263,10 +263,15 @@ class BandwidthSettings:
 @dataclass(frozen=True)
 class LoggingSettings:
     rclone_log_enabled: bool = False
+    auto_rclone_log_enabled: bool = False
+    auto_rclone_log_threshold: int = 3
 
     def normalized(self) -> LoggingSettings:
+        threshold = max(1, min(100, int(self.auto_rclone_log_threshold or 3)))
         return LoggingSettings(
             rclone_log_enabled=bool(self.rclone_log_enabled),
+            auto_rclone_log_enabled=bool(self.auto_rclone_log_enabled),
+            auto_rclone_log_threshold=threshold,
         )
 
     def to_dict(self) -> dict[str, Any]:
