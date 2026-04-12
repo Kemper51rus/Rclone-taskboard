@@ -10,7 +10,7 @@
     </filter>
   </defs>
   <rect width="820" height="120" fill="none"/>
-  <image href="https://raw.githubusercontent.com/Kemper51rus/Rclone-taskboard-web-gui/refs/heads/main/taskboard/backend/app/rclone-taskboard-logo.svg" x="52" y="32" width="56" height="56" filter="url(#markGlow)"/>
+  <image href="../taskboard/backend/app/rclone-taskboard-logo.svg" x="52" y="32" width="56" height="56" filter="url(#markGlow)"/>
   <text
     x="122"
     y="62"
