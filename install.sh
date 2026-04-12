@@ -220,8 +220,7 @@ copy_runtime_bundle() {
     "$target_root/taskboard" \
     "$target_root/taskboard/backend" \
     "$target_root/taskboard/backend/app" \
-    "$target_root/taskboard/data" \
-    "$target_root/systemd"
+    "$target_root/taskboard/data"
 
   cp -a "$source_root/taskboard/backend/app/." "$target_root/taskboard/backend/app/"
   find "$target_root/taskboard/backend/app" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -exec rm -rf {} +
@@ -233,8 +232,10 @@ copy_runtime_bundle() {
     "$target_root/scripts/install-taskboard-systemd.sh" \
     "$target_root/scripts/install-taskboard-docker.sh" \
     "$target_root/scripts/migrate-embedded-watcher-systemd.sh" \
-    "$target_root/systemd/${SERVICE_NAME%.service}-web.service"
+    "$target_root/systemd/${SERVICE_NAME%.service}-web.service" \
+    "$target_root/systemd/rclone-taskboard.service"
   rmdir "$target_root/scripts" 2>/dev/null || true
+  rmdir "$target_root/systemd" 2>/dev/null || true
   if [[ -f "$source_root/taskboard/backend/Dockerfile" ]]; then
     install -m 0644 "$source_root/taskboard/backend/Dockerfile" "$target_root/taskboard/backend/Dockerfile"
   fi
@@ -265,8 +266,8 @@ install_systemd_unit() {
   local escaped_target
   escaped_target="$(escape_sed_replacement "$target_root")"
   sed "s|/opt/rclone-taskboard|$escaped_target|g" \
-    "$source_root/systemd/rclone-taskboard.service" > "$target_root/systemd/rclone-taskboard.service"
-  install -m 0644 "$target_root/systemd/rclone-taskboard.service" "$SYSTEMD_DIR/$SERVICE_NAME"
+    "$source_root/rclone-taskboard.service" > "$target_root/rclone-taskboard.service"
+  install -m 0644 "$target_root/rclone-taskboard.service" "$SYSTEMD_DIR/$SERVICE_NAME"
   systemctl daemon-reload
 }
 

@@ -45,7 +45,7 @@
 | `taskboard/backend/app/jobs/default_jobs.example.json` | Шаблон каталога задач |
 | `taskboard/backend/app/jobs/default_jobs.json` | Рабочий каталог задач |
 | `taskboard/docker-compose.yml` | Развертывание через Docker |
-| `systemd/` | Unit-файлы для запуска на хосте |
+| `rclone-taskboard.service` | Unit-файл для запуска через systemd |
 
 ---
 

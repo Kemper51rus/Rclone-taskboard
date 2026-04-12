@@ -91,7 +91,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/Kemper51rus/Rclone-taskboard-w
 │   ├── .env.docker.example
 │   ├── .env.systemd.example
 │   └── docker-compose.yml
-├── systemd/
+├── rclone-taskboard.service
 └── README.md
 ```
 
@@ -103,7 +103,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/Kemper51rus/Rclone-taskboard-w
 | `taskboard/backend/app/jobs/default_jobs.example.json` | Шаблон каталога задач |
 | `taskboard/backend/app/jobs/default_jobs.json` | Рабочий каталог задач, создаётся при первом запуске |
 | `taskboard/docker-compose.yml` | Docker-стек |
-| `systemd/` | Unit-файлы для запуска на хосте |
+| `rclone-taskboard.service` | Unit-файл для запуска через systemd |
 
 ---
 
@@ -341,5 +341,5 @@ sudo ./install.sh
 - `docs/06-taskboard-mvp.md` — структура каталога и настройки
 - `docs/07-deployment.md` — развертывание
 - `docs/09-legacy-migration.md` — материалы по старому окружению и миграции
-- `taskboard/README.md` — заметки по каталогу `taskboard/`
+- `docs/10-taskboard-runtime.md` — заметки по runtime-каталогу `taskboard/`
 - `Security.md` — локальные заметки по безопасности, файл игнорируется Git

@@ -8,13 +8,13 @@
 
 | Путь | Назначение |
 | --- | --- |
-| `backend/app/main.py` | FastAPI entrypoint |
-| `backend/app/orchestrator.py` | Scheduler, queues, workers |
-| `backend/app/storage.py` | SQLite persistence |
-| `backend/app/jobs/default_jobs.example.json` | Шаблон рабочего каталога |
-| `.env.docker.example` | Шаблон env для Docker |
-| `.env.systemd.example` | Шаблон env для systemd |
-| `docker-compose.yml` | Docker-стек |
+| `taskboard/backend/app/main.py` | FastAPI entrypoint |
+| `taskboard/backend/app/orchestrator.py` | Scheduler, queues, workers |
+| `taskboard/backend/app/storage.py` | SQLite persistence |
+| `taskboard/backend/app/jobs/default_jobs.example.json` | Шаблон рабочего каталога |
+| `taskboard/.env.docker.example` | Шаблон env для Docker |
+| `taskboard/.env.systemd.example` | Шаблон env для systemd |
+| `taskboard/docker-compose.yml` | Docker-стек |
 
 ---
 
@@ -23,13 +23,13 @@
 При чистом старте приложение создаёт:
 
 ```text
-backend/app/jobs/default_jobs.json
+taskboard/backend/app/jobs/default_jobs.json
 ```
 
 из шаблона:
 
 ```text
-backend/app/jobs/default_jobs.example.json
+taskboard/backend/app/jobs/default_jobs.example.json
 ```
 
 ---
@@ -63,12 +63,12 @@ backend/app/jobs/default_jobs.example.json
 
 ## 📖 API Surface
 
-Полное описание вынесено в `docs/04-api-reference.md`. Ниже приведён краткий обзор текущего API без сокращений и устаревших endpoints.
+Полное описание вынесено в `docs/04-api-reference.md`.
 
 ---
 
 ## 📘 Связанные документы
 
-- [Руководство по развертыванию](/root/projects/rclone-web-ui/rclone/docs/07-deployment.md)
-- [Служебные заметки для разработки](/root/projects/rclone-web-ui/rclone/docs/08-development-notes.md)
-- [Архивные материалы по legacy](/root/projects/rclone-web-ui/rclone/docs/09-legacy-migration.md)
+- [Руководство по развертыванию](07-deployment.md)
+- [Служебные заметки для разработки](08-development-notes.md)
+- [Архивные материалы по legacy](09-legacy-migration.md)
