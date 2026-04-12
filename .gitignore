@@ -5,6 +5,7 @@ taskboard/backend/app/jobs/default_jobs.json
 Security.md
 docs/Security.md
 taskboard/Security.md
+git-push.sh
 
 # Sensitive runtime state and logs
 state/
