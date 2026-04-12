@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="120" viewBox="0 0 820 120" role="img" aria-labelledby="title desc">
+  <title id="title">Rclone taskboard</title>
+  <desc id="desc">Rclone taskboard wordmark matching the dashboard header style.</desc>
+  <defs>
+    <filter id="markGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="0" stdDeviation="9" flood-color="#7ce0ff" flood-opacity="0.14"/>
+    </filter>
+    <filter id="textGlow" x="-10%" y="-80%" width="120%" height="260%">
+      <feDropShadow dx="0" dy="0" stdDeviation="9" flood-color="#7ce0ff" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <rect width="820" height="120" fill="none"/>
+  <image href="../taskboard/backend/app/rclone-taskboard-logo.svg" x="52" y="32" width="56" height="56" filter="url(#markGlow)"/>
+  <text
+    x="122"
+    y="62"
+    fill="#7ce0ff"
+    font-family="Trebuchet MS, Segoe UI, sans-serif"
+    font-size="40"
+    font-weight="700"
+    letter-spacing="6.4"
+    dominant-baseline="middle"
+    filter="url(#textGlow)">RCLONE TASKBOARD</text>
+</svg>
