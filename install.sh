@@ -56,7 +56,6 @@ log_section() {
 }
 
 log_ok() {
-<<<<<<< codex/improve-install.sh-output-and-dependency-tracking-lsu4ci
   printf '%b\n' "${C_GREEN}OK${C_RESET}  $*"
 }
 
@@ -66,7 +65,6 @@ log_warn() {
 
 log_err() {
   printf '%b\n' "${C_RED}ERR${C_RESET} $*"
-=======
   printf '%b\n' "${C_GREEN}✔${C_RESET} $*"
 }
 
@@ -76,7 +74,6 @@ log_warn() {
 
 log_err() {
   printf '%b\n' "${C_RED}✖${C_RESET} $*"
->>>>>>> main
 }
 
 die() {
@@ -168,13 +165,7 @@ install_packages() {
       fi
     done
     log "Выполняю: apt-get update"
-<<<<<<< codex/improve-install.sh-output-and-dependency-tracking-lsu4ci
-    if ! apt-get update; then
-      log_warn "apt-get update завершился с ошибкой. Продолжаю установку по текущему кэшу APT."
-    fi
-=======
     apt-get update
->>>>>>> main
     log "Выполняю: apt-get install -y ${packages[*]}"
     DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
     if [[ "${#to_record[@]}" -gt 0 ]]; then
@@ -571,15 +562,9 @@ print_docker_status() {
   local container_state
   container_state="$(docker inspect -f '{{.State.Status}}' "$DOCKER_CONTAINER_NAME" 2>/dev/null || true)"
   if [[ -n "$container_state" ]]; then
-<<<<<<< codex/improve-install.sh-output-and-dependency-tracking-lsu4ci
-    log "  docker: контейнер '$DOCKER_CONTAINER_NAME' ${C_GREEN}найден${C_RESET} (state=$container_state)"
-  else
-    log "  docker: контейнер '$DOCKER_CONTAINER_NAME' ${C_RED}не найден${C_RESET}"
-=======
     log "  docker: контейнер '$DOCKER_CONTAINER_NAME' найден (state=$container_state)"
   else
     log "  docker: контейнер '$DOCKER_CONTAINER_NAME' не найден"
->>>>>>> main
   fi
 }
 
@@ -587,7 +572,6 @@ print_status() {
   log ""
   log_section "Текущий статус"
   if systemctl list-unit-files "$SERVICE_NAME" --no-legend >/dev/null 2>&1; then
-<<<<<<< codex/improve-install.sh-output-and-dependency-tracking-lsu4ci
     log "  systemd: $SERVICE_NAME ${C_GREEN}найден${C_RESET}"
     systemctl is-active --quiet "$SERVICE_NAME" && log "  active: yes" || log_warn "active: no"
   else
@@ -598,14 +582,12 @@ print_status() {
   else
     log "  runtime: $TARGET_ROOT ${C_RED}не найден${C_RESET}"
   fi
-=======
     log_ok "systemd: $SERVICE_NAME найден"
     systemctl is-active --quiet "$SERVICE_NAME" && log "  active: yes" || log_warn "active: no"
   else
     log_warn "systemd: $SERVICE_NAME не найден"
   fi
   [[ -d "$TARGET_ROOT" ]] && log_ok "runtime: $TARGET_ROOT найден" || log_warn "runtime: $TARGET_ROOT не найден"
->>>>>>> main
   print_docker_status
   print_dependency_status
   [[ -n "$SCRIPT_REPO_ROOT" ]] && log "  current git checkout: $SCRIPT_REPO_ROOT"
