@@ -705,11 +705,15 @@ uninstall_taskboard() {
   fi
 
   if [[ -f "$TARGET_ROOT/taskboard/docker-compose.yml" ]]; then
-    if confirm "Остановить docker compose stack в $TARGET_ROOT/taskboard?" "yes"; then
-      (
-        cd "$TARGET_ROOT/taskboard"
-        docker_compose --env-file .env.docker down || true
-      )
+    if command_exists docker && { docker compose version >/dev/null 2>&1 || command_exists docker-compose; }; then
+      if confirm "Остановить docker compose stack в $TARGET_ROOT/taskboard?" "yes"; then
+        (
+          cd "$TARGET_ROOT/taskboard"
+          docker_compose --env-file .env.docker down || true
+        )
+      fi
+    else
+      log_warn "Docker/Compose недоступен: остановка compose stack пропущена."
     fi
   fi
 
