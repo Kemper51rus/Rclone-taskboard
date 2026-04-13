@@ -71,6 +71,116 @@ log_err() {
   printf '%b\n' "${C_RED}ERR${C_RESET} $*"
 }
 
+
+print_separator() {
+  printf '%b\n' "${C_CYAN}------------------------------------------------------------${C_RESET}"
+}
+
+package_installed_by_script() {
+  local package_name="$1"
+  [[ -f "$APT_INSTALLED_RECORD" ]] || return 1
+  grep -Fxq "$package_name" "$APT_INSTALLED_RECORD"
+}
+
+get_local_ipv4s() {
+  local ips=() ip
+
+  if command_exists hostname; then
+    while read -r ip; do
+      [[ -n "$ip" ]] || continue
+      [[ "$ip" == 127.* ]] && continue
+      ips+=("$ip")
+    done < <(hostname -I 2>/dev/null | tr ' ' '\n' | awk '/^[0-9]+(\.[0-9]+){3}$/')
+  fi
+
+  if [[ "${#ips[@]}" -eq 0 ]] && command_exists ip; then
+    while read -r ip; do
+      [[ -n "$ip" ]] || continue
+      [[ "$ip" == 127.* ]] && continue
+      ips+=("$ip")
+    done < <(ip -o -4 addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
+  fi
+
+  [[ "${#ips[@]}" -gt 0 ]] || return 0
+  printf '%s\n' "${ips[@]}" | awk '!seen[$0]++'
+}
+
+first_local_ipv4() {
+  local ip
+  ip="$(get_local_ipv4s | head -n1 || true)"
+  printf '%s\n' "$ip"
+}
+
+print_access_summary() {
+  local mode="$1"
+  local dashboard_port="8080"
+  local primary_ip dashboard_url localhost_url rclone_url
+
+  primary_ip="$(first_local_ipv4)"
+  localhost_url="http://127.0.0.1:${dashboard_port}/"
+  if [[ -n "$primary_ip" ]]; then
+    dashboard_url="http://${primary_ip}:${dashboard_port}/"
+  else
+    dashboard_url="http://<local-ip>:${dashboard_port}/"
+  fi
+
+  log ""
+  print_separator
+  printf '%b\n' "${C_GREEN}${C_BOLD}Rclone taskboard установлен${C_RESET}"
+  printf '%b\n' "${C_CYAN}Режим:${C_RESET} $mode"
+  printf '%b\n' "${C_CYAN}Runtime:${C_RESET} $TARGET_ROOT"
+  printf '%b\n' "${C_CYAN}Сервис:${C_RESET} $SERVICE_NAME"
+  printf '%b\n' "${C_CYAN}Taskboard localhost:${C_RESET} $localhost_url"
+  printf '%b\n' "${C_CYAN}Taskboard LAN:${C_RESET} $dashboard_url"
+
+  if systemctl list-unit-files "$SERVICE_NAME" --no-legend >/dev/null 2>&1; then
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
+      printf '%b\n' "${C_GREEN}Systemd service active: yes${C_RESET}"
+    else
+      printf '%b\n' "${C_YELLOW}Systemd service active: no${C_RESET}"
+    fi
+  fi
+
+  if package_installed_by_script rclone; then
+    if command_exists ss && ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq '(^|:)5572$'; then
+      if [[ -n "$primary_ip" ]]; then
+        rclone_url="http://${primary_ip}:5572/"
+      else
+        rclone_url="http://127.0.0.1:5572/"
+      fi
+      printf '%b\n' "${C_CYAN}Rclone Web/RC:${C_RESET} $rclone_url"
+    else
+      printf '%b\n' "${C_CYAN}Rclone:${C_RESET} пакет установлен скриптом, отдельный Web/RC URL сейчас не настроен"
+    fi
+  fi
+
+  printf '%b\n' "${C_CYAN}Health:${C_RESET} ${localhost_url}api/health"
+  print_separator
+}
+
+print_failure_summary() {
+  local exit_code="$1"
+  local failed_command="$2"
+
+  log ""
+  print_separator
+  printf '%b\n' "${C_RED}${C_BOLD}Установка завершилась с ошибкой${C_RESET}"
+  printf '%b\n' "${C_CYAN}Код выхода:${C_RESET} $exit_code"
+  [[ -n "$failed_command" ]] && printf '%b\n' "${C_CYAN}Команда:${C_RESET} $failed_command"
+  printf '%b\n' "${C_CYAN}Runtime:${C_RESET} $TARGET_ROOT"
+  [[ -n "$SOURCE_ROOT" ]] && printf '%b\n' "${C_CYAN}Source checkout:${C_RESET} $SOURCE_ROOT"
+  printf '%b\n' "${C_YELLOW}Установка остановилась до финального запуска сервиса. Проверьте ошибки выше.${C_RESET}"
+  print_separator
+}
+
+on_error() {
+  local exit_code=$?
+  local failed_command="${BASH_COMMAND:-unknown}"
+  trap - ERR
+  print_failure_summary "$exit_code" "$failed_command"
+  exit "$exit_code"
+}
+
 die() {
   log_err "ERROR: $*"
   exit 1
@@ -129,7 +239,7 @@ ask_value_maybe_auto() {
   local prompt="$1"
   local default="$2"
   if use_standard_settings; then
-    log "$prompt [$default]: auto"
+    printf '%s\n' "$prompt [$default]: auto" >&2
     printf '%s\n' "$default"
     return 0
   fi
@@ -142,7 +252,7 @@ confirm_maybe_auto() {
   if use_standard_settings; then
     local suffix="[y/N]"
     [[ "$default" == "yes" ]] && suffix="[Y/n]"
-    log "$prompt $suffix auto: $default"
+    printf '%s\n' "$prompt $suffix auto: $default" >&2
     [[ "$default" == "yes" ]]
     return
   fi
@@ -474,7 +584,7 @@ install_or_update_systemd() {
   systemctl restart "$SERVICE_NAME"
 
   log "Systemd установка/обновление завершены."
-  log "Dashboard: http://<host>:8080/"
+  print_access_summary "systemd"
   systemctl status "$SERVICE_NAME" --no-pager || true
 }
 
@@ -500,7 +610,7 @@ install_or_update_docker() {
   )
 
   log "Docker установка/обновление завершены."
-  log "Dashboard: http://<host>:8080/"
+  print_access_summary "docker"
 }
 
 backup_path() {
@@ -636,7 +746,6 @@ print_dependency_status() {
     printf '    - %-14s : %b (pkg: %s)\n' "python3-venv" "$status_line" "python3-venv"
   fi
 }
-
 print_docker_status() {
   if ! command_exists docker; then
     log "  docker: команда docker не найдена"
@@ -693,6 +802,7 @@ MENU
 }
 
 setup_colors
+trap on_error ERR
 
 case "${1:-}" in
   systemd) install_or_update_systemd ;;
