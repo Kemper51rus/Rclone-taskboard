@@ -94,6 +94,7 @@ command_exists() {
 
 confirm() {
   local prompt="$1"
+@@ -72,115 +109,151 @@ confirm() {
       y|yes|д|да) return 0 ;;
       n|no|н|нет) return 1 ;;
       *) log "Ответьте yes/no или да/нет." ;;
