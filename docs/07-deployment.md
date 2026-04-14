@@ -66,8 +66,15 @@ sudo ./install.sh
 - поставить или обновить deployment через `docker`
 - подтянуть исходники из Git перед установкой
 - проверить зависимости и предложить доустановить недостающие
+- выбрать начальный каталог задач: с примерами или пустой список задач без шаблона
+- настроить отдельный `rclone-web.service` для Rclone Web GUI, если rclone ещё не настроен
 - выполнить переход с legacy: сделать backup, остановить и удалить старые legacy-скрипты и unit'ы
 - удалить taskboard-установку при повторном запуске
+
+Installer не записывает `rclone.conf`.
+Если на хосте уже есть `/root/.config/rclone/rclone.conf` с remotes или уже установлен `rclone-web.service`, installer не меняет и не перезапускает rclone.
+Если rclone Web GUI unit создаётся впервые, он повторяет текущую локальную схему запуска: `rclone rcd --rc-web-gui --rc-addr :3000 --rc-no-auth`.
+В итогах установки выводится LAN-адрес taskboard и, если unit есть, LAN-адрес Rclone Web GUI.
 
 Legacy-cleanup покрывает старые файлы:
 

@@ -10,8 +10,13 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 SERVICE_NAME="${SERVICE_NAME:-rclone-taskboard.service}"
 SOURCE_CHECKOUT_DEFAULT="${SOURCE_CHECKOUT_DEFAULT:-/opt/rclone-taskboard-src}"
 DOCKER_CONTAINER_NAME="${DOCKER_CONTAINER_NAME:-rclone-taskboard}"
+RCLONE_WEB_SERVICE_NAME="${RCLONE_WEB_SERVICE_NAME:-rclone-web.service}"
+RCLONE_WEB_ADDR="${RCLONE_WEB_ADDR:-:3000}"
+RCLONE_WEB_NO_AUTH="${RCLONE_WEB_NO_AUTH:-yes}"
+JOBS_TEMPLATE_MODE="${JOBS_TEMPLATE_MODE:-}"
 STATE_DIR="${STATE_DIR:-/var/lib/rclone-taskboard-installer}"
 APT_INSTALLED_RECORD="$STATE_DIR/apt-installed-by-install-sh.txt"
+RCLONE_WEB_INSTALLED_MARKER="$STATE_DIR/rclone-web-service-installed-by-install-sh"
 
 USE_STANDARD_SETTINGS="${USE_STANDARD_SETTINGS:-}"
 STANDARD_SETTINGS_INITIALIZED=0
@@ -120,7 +125,7 @@ first_local_ipv4() {
 print_access_summary() {
   local mode="$1"
   local dashboard_port="8080"
-  local primary_ip dashboard_url rclone_url
+  local primary_ip dashboard_url rclone_url rclone_web_port
 
   primary_ip="$(first_local_ipv4)"
   if [[ -n "$primary_ip" ]]; then
@@ -145,16 +150,21 @@ print_access_summary() {
     fi
   fi
 
-  if package_installed_by_script rclone; then
-    if command_exists ss && ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq '(^|:)5572$'; then
-      if [[ -n "$primary_ip" ]]; then
-        rclone_url="http://${primary_ip}:5572/"
-      else
-        rclone_url="http://127.0.0.1:5572/"
-      fi
-      printf '%b\n' "${C_CYAN}Rclone Web/RC:${C_RESET} $rclone_url"
+  rclone_web_port="$(rclone_web_port)"
+  if has_working_systemd && systemctl list-unit-files "$RCLONE_WEB_SERVICE_NAME" --no-legend >/dev/null 2>&1; then
+    if [[ -n "$primary_ip" ]]; then
+      rclone_url="http://${primary_ip}:${rclone_web_port}/"
     else
-      printf '%b\n' "${C_CYAN}Rclone:${C_RESET} пакет установлен скриптом, отдельный Web/RC URL сейчас не настроен"
+      rclone_url="http://<local-ip>:${rclone_web_port}/"
+    fi
+    printf '%b\n' "${C_CYAN}Rclone Web GUI LAN:${C_RESET} $rclone_url"
+    if systemctl is-active --quiet "$RCLONE_WEB_SERVICE_NAME"; then
+      printf '%b\n' "${C_GREEN}Rclone Web GUI service active: yes${C_RESET}"
+    else
+      printf '%b\n' "${C_YELLOW}Rclone Web GUI service active: no${C_RESET}"
+    fi
+    if [[ "${RCLONE_WEB_NO_AUTH,,}" =~ ^(1|y|yes|true|on)$ ]]; then
+      printf '%b\n' "${C_YELLOW}Rclone Web GUI работает без авторизации; ограничьте доступ сетевыми правилами при необходимости.${C_RESET}"
     fi
   fi
 
@@ -400,6 +410,67 @@ package_for_command() {
   esac
 }
 
+rclone_web_port() {
+  local addr="$RCLONE_WEB_ADDR"
+  local port="${addr##*:}"
+  if [[ "$port" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$port"
+  else
+    printf '3000\n'
+  fi
+}
+
+rclone_binary_path() {
+  if [[ -x /opt/rclone/rclone ]]; then
+    printf '/opt/rclone/rclone\n'
+    return 0
+  fi
+  command -v rclone
+}
+
+normalize_jobs_template_mode() {
+  local mode="${1,,}"
+  case "$mode" in
+    examples|example|demo|samples|sample|шаблон|примеры)
+      printf 'examples\n'
+      ;;
+    empty|blank|none|no-template|without-template|без-шаблона|пустой)
+      printf 'empty\n'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+choose_jobs_template_mode() {
+  local choice normalized
+  if [[ -n "$JOBS_TEMPLATE_MODE" ]]; then
+    normalized="$(normalize_jobs_template_mode "$JOBS_TEMPLATE_MODE")" \
+      || die "Неизвестный JOBS_TEMPLATE_MODE=$JOBS_TEMPLATE_MODE. Допустимо: examples или empty."
+    JOBS_TEMPLATE_MODE="$normalized"
+    return 0
+  fi
+
+  if use_standard_settings; then
+    JOBS_TEMPLATE_MODE="examples"
+    log_ok "Каталог задач: будут установлены примеры из default_jobs.example.json."
+    return 0
+  fi
+
+  log "Выберите начальный каталог задач:"
+  log "  1) С примерами из taskboard/backend/app/jobs/default_jobs.example.json"
+  log "  2) Без шаблона: пустой список задач"
+  while true; do
+    read -r -p "Номер варианта [1]: " choice
+    case "${choice:-1}" in
+      1) JOBS_TEMPLATE_MODE="examples"; return 0 ;;
+      2) JOBS_TEMPLATE_MODE="empty"; return 0 ;;
+      *) log "Введите 1 или 2." ;;
+    esac
+  done
+}
+
 check_python_venv() {
   if [[ -n "$PYTHON_VENV_CHECK_CACHE" ]]; then
     [[ "$PYTHON_VENV_CHECK_CACHE" == "ok" ]]
@@ -432,7 +503,7 @@ ensure_dependencies() {
   local required_commands=(git install systemctl "$PYTHON_BIN" rclone curl)
 
   if [[ "$mode" == "docker" ]]; then
-    required_commands=(git install docker curl)
+    required_commands=(git install docker curl rclone)
   fi
 
   for command_name in "${required_commands[@]}"; do
@@ -514,6 +585,13 @@ prepare_source_checkout() {
 copy_runtime_bundle() {
   local source_root="$1"
   local target_root="$2"
+  local target_jobs_file preserved_jobs_file=""
+
+  target_jobs_file="$target_root/taskboard/backend/app/jobs/default_jobs.json"
+  if [[ -f "$target_jobs_file" ]]; then
+    preserved_jobs_file="$(mktemp /tmp/rclone-taskboard-jobs.XXXXXX)"
+    cp -a "$target_jobs_file" "$preserved_jobs_file"
+  fi
 
   install -d \
     "$target_root" \
@@ -524,9 +602,18 @@ copy_runtime_bundle() {
 
   cp -a "$source_root/taskboard/backend/app/." "$target_root/taskboard/backend/app/"
   find "$target_root/taskboard/backend/app" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -exec rm -rf {} +
+  if [[ -n "$preserved_jobs_file" ]]; then
+    install -m 0644 "$preserved_jobs_file" "$target_jobs_file"
+    rm -f "$preserved_jobs_file"
+  else
+    rm -f "$target_jobs_file"
+  fi
 
   install -m 0644 "$source_root/taskboard/backend/requirements.txt" "$target_root/taskboard/backend/requirements.txt"
   install -m 0644 "$source_root/taskboard/backend/app/jobs/default_jobs.example.json" "$target_root/taskboard/backend/app/jobs/default_jobs.example.json"
+  if [[ -f "$source_root/taskboard/backend/app/jobs/default_jobs.empty.json" ]]; then
+    install -m 0644 "$source_root/taskboard/backend/app/jobs/default_jobs.empty.json" "$target_root/taskboard/backend/app/jobs/default_jobs.empty.json"
+  fi
   install -m 0755 "$source_root/install.sh" "$target_root/install.sh"
   rm -f \
     "$target_root/scripts/install-taskboard-systemd.sh" \
@@ -549,11 +636,34 @@ copy_runtime_bundle() {
     install -m 0644 "$source_root/taskboard/.env.systemd.example" "$target_root/taskboard/.env.systemd.example"
   fi
 
-  if [[ ! -f "$target_root/taskboard/backend/app/jobs/default_jobs.json" ]]; then
-    install -m 0644 \
-      "$source_root/taskboard/backend/app/jobs/default_jobs.example.json" \
-      "$target_root/taskboard/backend/app/jobs/default_jobs.json"
+}
+
+install_initial_jobs_catalog() {
+  local source_root="$1"
+  local target_root="$2"
+  local source_template target_jobs_file
+
+  target_jobs_file="$target_root/taskboard/backend/app/jobs/default_jobs.json"
+  if [[ -f "$target_jobs_file" ]]; then
+    log "Рабочий каталог задач сохранён без изменений: $target_jobs_file"
+    return 0
   fi
+
+  case "$JOBS_TEMPLATE_MODE" in
+    empty)
+      source_template="$source_root/taskboard/backend/app/jobs/default_jobs.empty.json"
+      ;;
+    examples|"")
+      source_template="$source_root/taskboard/backend/app/jobs/default_jobs.example.json"
+      ;;
+    *)
+      die "Неизвестный режим каталога задач: $JOBS_TEMPLATE_MODE"
+      ;;
+  esac
+
+  [[ -f "$source_template" ]] || die "Не найден шаблон каталога задач: $source_template"
+  install -m 0644 "$source_template" "$target_jobs_file"
+  log_ok "Создан рабочий каталог задач из шаблона: $(basename "$source_template")"
 }
 
 escape_sed_replacement() {
@@ -598,6 +708,60 @@ remove_obsolete_embedded_watcher_unit() {
   systemctl daemon-reload
 }
 
+install_rclone_web_service() {
+  if ! has_working_systemd; then
+    log_warn "systemd недоступен: настройка $RCLONE_WEB_SERVICE_NAME пропущена."
+    return 0
+  fi
+  if systemctl list-unit-files "$RCLONE_WEB_SERVICE_NAME" --no-legend >/dev/null 2>&1; then
+    log "Найден существующий $RCLONE_WEB_SERVICE_NAME: installer не меняет и не перезапускает уже настроенный rclone."
+    return 0
+  fi
+  if [[ -f /root/.config/rclone/rclone.conf ]] && grep -Eq '^\[[^]]+\]$' /root/.config/rclone/rclone.conf; then
+    log "Найден существующий /root/.config/rclone/rclone.conf: installer не меняет уже настроенный rclone."
+    return 0
+  fi
+  if ! command_exists rclone && [[ ! -x /opt/rclone/rclone ]]; then
+    log_warn "rclone не найден: настройка $RCLONE_WEB_SERVICE_NAME пропущена."
+    return 0
+  fi
+  if ! confirm_maybe_auto "Настроить rclone Web GUI на ${RCLONE_WEB_ADDR} так же, как текущий rclone-web.service?" "yes"; then
+    log "Настройка rclone Web GUI пропущена."
+    return 0
+  fi
+
+  local rclone_bin rc_auth_args
+  rclone_bin="$(rclone_binary_path)"
+  rc_auth_args=(--rc-no-auth)
+
+  if [[ ! "${RCLONE_WEB_NO_AUTH,,}" =~ ^(1|y|yes|true|on)$ ]]; then
+    log_warn "RCLONE_WEB_NO_AUTH=$RCLONE_WEB_NO_AUTH пока не задаёт htpasswd автоматически; будет использован режим без авторизации."
+  fi
+
+  cat > "$SYSTEMD_DIR/$RCLONE_WEB_SERVICE_NAME" <<EOF
+[Unit]
+Description=Rclone Web GUI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=$rclone_bin rcd --rc-web-gui --rc-web-gui-no-open-browser --rc-addr $RCLONE_WEB_ADDR ${rc_auth_args[*]}
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  install -d "$STATE_DIR"
+  touch "$RCLONE_WEB_INSTALLED_MARKER"
+  systemctl daemon-reload
+  systemctl enable "$RCLONE_WEB_SERVICE_NAME"
+  systemctl restart "$RCLONE_WEB_SERVICE_NAME"
+  log_ok "Настроен $RCLONE_WEB_SERVICE_NAME: rclone rcd --rc-web-gui --rc-addr $RCLONE_WEB_ADDR --rc-no-auth"
+}
+
 install_or_update_systemd() {
   initialize_install_preferences
   need_root
@@ -607,12 +771,14 @@ install_or_update_systemd() {
   TARGET_ROOT="$(ask_path_value_maybe_auto "Каталог установки runtime" "$TARGET_ROOT")"
   ensure_dependencies systemd
   prepare_source_checkout
+  choose_jobs_template_mode
 
   if confirm_maybe_auto "Выполнить переход с legacy и удалить старые скрипты/unit'ы?" "no"; then
     cleanup_legacy
   fi
 
   copy_runtime_bundle "$SOURCE_ROOT" "$TARGET_ROOT"
+  install_initial_jobs_catalog "$SOURCE_ROOT" "$TARGET_ROOT"
   if [[ ! -f "$TARGET_ROOT/taskboard/.env" ]]; then
     install -m 0644 "$SOURCE_ROOT/taskboard/.env.systemd.example" "$TARGET_ROOT/taskboard/.env"
   fi
@@ -624,6 +790,7 @@ install_or_update_systemd() {
   install_systemd_unit "$SOURCE_ROOT" "$TARGET_ROOT"
   remove_obsolete_taskboard_units
   remove_obsolete_embedded_watcher_unit
+  install_rclone_web_service
   systemctl enable "$SERVICE_NAME"
   systemctl restart "$SERVICE_NAME"
 
@@ -637,15 +804,19 @@ install_or_update_docker() {
   TARGET_ROOT="$(ask_path_value_maybe_auto "Каталог установки runtime" "$TARGET_ROOT")"
   ensure_dependencies docker
   prepare_source_checkout
+  choose_jobs_template_mode
 
   if confirm_maybe_auto "Выполнить переход с legacy и удалить старые скрипты/unit'ы?" "no"; then
     cleanup_legacy
   fi
 
   copy_runtime_bundle "$SOURCE_ROOT" "$TARGET_ROOT"
+  install_initial_jobs_catalog "$SOURCE_ROOT" "$TARGET_ROOT"
   if [[ ! -f "$TARGET_ROOT/taskboard/.env.docker" ]]; then
     install -m 0644 "$SOURCE_ROOT/taskboard/.env.docker.example" "$TARGET_ROOT/taskboard/.env.docker"
   fi
+
+  install_rclone_web_service
 
   (
     cd "$TARGET_ROOT/taskboard"
@@ -745,11 +916,24 @@ uninstall_taskboard() {
     if has_working_systemd; then
       systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true
       rm -f "$SYSTEMD_DIR/$SERVICE_NAME"
+      if [[ -f "$RCLONE_WEB_INSTALLED_MARKER" ]]; then
+        systemctl disable --now "$RCLONE_WEB_SERVICE_NAME" 2>/dev/null || true
+        rm -f "$SYSTEMD_DIR/$RCLONE_WEB_SERVICE_NAME"
+        rm -f "$RCLONE_WEB_INSTALLED_MARKER"
+      else
+        log "Существующий $RCLONE_WEB_SERVICE_NAME не удаляется: он не был создан этим installer."
+      fi
       systemctl daemon-reload || true
       systemctl reset-failed "$SERVICE_NAME" 2>/dev/null || true
+      [[ -f "$RCLONE_WEB_INSTALLED_MARKER" ]] && systemctl reset-failed "$RCLONE_WEB_SERVICE_NAME" 2>/dev/null || true
     else
       log_warn "systemd недоступен: service не может быть остановлен через systemctl, будет только удалён unit-файл."
       rm -f "$SYSTEMD_DIR/$SERVICE_NAME"
+      if [[ -f "$RCLONE_WEB_INSTALLED_MARKER" ]]; then
+        rm -f "$SYSTEMD_DIR/$RCLONE_WEB_SERVICE_NAME" "$RCLONE_WEB_INSTALLED_MARKER"
+      else
+        log "Существующий $RCLONE_WEB_SERVICE_NAME не удаляется: он не был создан этим installer."
+      fi
     fi
   fi
 
@@ -859,6 +1043,12 @@ print_status() {
     else
       log "  systemd unit: $SERVICE_NAME ${C_RED}не найден${C_RESET}"
     fi
+    if systemctl list-unit-files "$RCLONE_WEB_SERVICE_NAME" --no-legend >/dev/null 2>&1; then
+      log "  rclone web unit: $RCLONE_WEB_SERVICE_NAME ${C_GREEN}найден${C_RESET}"
+      systemctl is-active --quiet "$RCLONE_WEB_SERVICE_NAME" && log "  rclone web active: yes" || log_warn "rclone web active: no"
+    else
+      log "  rclone web unit: $RCLONE_WEB_SERVICE_NAME ${C_RED}не найден${C_RESET}"
+    fi
   else
     log "  systemd host: ${C_RED}недоступен${C_RESET} (${C_DIM}нет рабочего systemd / PID 1${C_RESET})"
     log "  systemd unit: проверка пропущена"
@@ -933,6 +1123,9 @@ Environment:
   SOURCE_ROOT=${SOURCE_ROOT:-auto}
   DEFAULT_GIT_URL=$DEFAULT_GIT_URL
   DEFAULT_GIT_REF=$DEFAULT_GIT_REF
+  JOBS_TEMPLATE_MODE=${JOBS_TEMPLATE_MODE:-examples|empty}
+  RCLONE_WEB_SERVICE_NAME=$RCLONE_WEB_SERVICE_NAME
+  RCLONE_WEB_ADDR=$RCLONE_WEB_ADDR
 EOF
     exit 2
     ;;

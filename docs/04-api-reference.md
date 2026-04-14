@@ -13,6 +13,7 @@
 | Method | Endpoint | Назначение |
 | --- | --- | --- |
 | `GET` | `/` | Возвращает HTML dashboard |
+| `GET` | `/favicon.svg` | Возвращает SVG-иконку приложения |
 
 ---
 
@@ -100,6 +101,7 @@ Cloud settings читаются из `rclone.conf`, но приложение с
 ### Query params
 
 - `path` — абсолютный путь; если параметр не передан, возвращаются корневые директории из разрешённого списка
+- `include_files` — если `true`, вместе с директориями возвращаются файлы; используется для выбора path-исключений
 
 ---
 
@@ -164,6 +166,7 @@ Cloud settings читаются из `rclone.conf`, но приложение с
 - `backup.options` и `retention` поддерживают structured `rclone`-поля:
   `transfers`, `checkers`, `tpslimit`, `tpslimit_burst`, `retries`, `low_level_retries`,
   `retries_sleep`, `fast_list`, `no_traverse`, `debug_dump`, `mailru_safe_preset`, `exclude`, `extra_args`
+- `backup.options.exclude_paths` поддерживает path-исключения вида `{"path": "/abs/path", "kind": "file|directory"}`; путь должен быть внутри `source_path`
 
 ---
 

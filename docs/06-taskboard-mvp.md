@@ -11,6 +11,7 @@
 | Файл | Роль |
 | --- | --- |
 | `taskboard/backend/app/jobs/default_jobs.example.json` | Шаблон каталога, хранится в Git |
+| `taskboard/backend/app/jobs/default_jobs.empty.json` | Пустой шаблон без задач для чистой установки |
 | `taskboard/backend/app/jobs/default_jobs.json` | Рабочий каталог, создаётся из шаблона |
 
 ### Основные секции
@@ -40,6 +41,8 @@ Catalog содержит:
 - structured `rclone`-опции у backup и retention:
   `transfers`, `checkers`, `tpslimit`, `tpslimit_burst`, `retries`, `low_level_retries`,
   `retries_sleep`, `fast_list`, `no_traverse`, `debug_dump`, `extra_args`
+- `exclude patterns` с масками `rclone`, например `*.tmp`, `vzdump-qemu-400*`, `**/cache/**`
+- `exclude_paths` для выбора нескольких файлов или каталогов внутри исходного каталога
 - `Mail.ru safe preset` для снижения параллелизма и частоты API-запросов
 - timeout
 - schedule
@@ -88,6 +91,11 @@ default_jobs.example.json -> default_jobs.json
 ```
 
 Это упрощает первый запуск и не требует заранее готовить рабочий JSON-файл.
+
+Installer при чистой установке предлагает выбрать стартовый каталог:
+
+- `examples` — каталог с примерами из `default_jobs.example.json`
+- `empty` — пустой каталог без задач из `default_jobs.empty.json`
 
 ---
 

@@ -119,6 +119,8 @@
 - состав и порядок задач
 - режим передачи: `copy` или `sync`
 - structured `rclone`-опции для backup/retention: `transfers`, `checkers`, `tpslimit`, `tpslimit_burst`, `retries`, `low_level_retries`, `retries_sleep`, `fast_list`, `no_traverse`, `debug_dump`, `extra_args`
+- исключения через `exclude patterns` с масками `rclone`, например `*.tmp`, `vzdump-qemu-400*`, `**/cache/**`
+- исключения по путям через `exclude_paths`: выбор одного или нескольких файлов/каталогов внутри исходного каталога
 - `Mail.ru safe preset` для бережного режима `rclone`
 - расписание
 - таймауты
@@ -154,6 +156,8 @@ default_jobs.example.json -> default_jobs.json
 | `TASKBOARD_STANDARD_INTERVAL_MINUTES` | Интервал стандартных задач |
 | `TASKBOARD_HEAVY_HOUR` | Час запуска heavy-задач |
 | `TASKBOARD_WATCHER_DEBOUNCE_SECONDS` | Начальное значение debounce для watcher |
+| `TASKBOARD_COPY_STARTUP_DELAY_SECONDS` | Задержка перед первым стартом backup/sync после запуска backend |
+| `TASKBOARD_COPY_MIN_START_INTERVAL_SECONDS` | Минимальный интервал между стартами backup/sync по всей системе |
 | `TASKBOARD_DEFAULT_TIMEOUT_SECONDS` | Таймаут команд по умолчанию |
 | `TASKBOARD_OUTPUT_TAIL_CHARS` | Размер сохраняемого tail вывода |
 | `TASKBOARD_DRY_RUN` | Dry-run режим |

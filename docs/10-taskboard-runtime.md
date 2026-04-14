@@ -12,6 +12,7 @@
 | `taskboard/backend/app/orchestrator.py` | Scheduler, queues, workers |
 | `taskboard/backend/app/storage.py` | SQLite persistence |
 | `taskboard/backend/app/jobs/default_jobs.example.json` | Шаблон рабочего каталога |
+| `taskboard/backend/app/jobs/default_jobs.empty.json` | Пустой шаблон рабочего каталога без задач |
 | `taskboard/.env.docker.example` | Шаблон env для Docker |
 | `taskboard/.env.systemd.example` | Шаблон env для systemd |
 | `taskboard/docker-compose.yml` | Docker-стек |
