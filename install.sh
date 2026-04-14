@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEFAULT_GIT_URL="${DEFAULT_GIT_URL:-https://github.com/Kemper51rus/Rclone-taskboard-web-gui.git}"
+DEFAULT_GIT_URL="${DEFAULT_GIT_URL:-https://github.com/Kemper51rus/Rclone-taskboard.git}"
 DEFAULT_GIT_REF="${DEFAULT_GIT_REF:-main}"
 TARGET_ROOT="${TARGET_ROOT:-/opt/rclone-taskboard}"
 SOURCE_ROOT="${SOURCE_ROOT:-}"
