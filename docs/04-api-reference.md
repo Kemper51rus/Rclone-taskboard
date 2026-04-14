@@ -31,6 +31,7 @@
 - `queue_statuses` — состояние очередей
 - `copy_progress` — активные и ожидающие backup/copy шаги для progress UI
 - `total_copy_speed_bytes_per_second` — суммарная скорость всех активных `copy/sync` задач в байтах в секунду
+- `total_copy_speed_megabits_per_second` — та же суммарная скорость в Мбит/с
 - `active_operations` — список открытых операций
 - `latest_runs` — последние запуски
 - `backup_jobs` — backup-задачи каталога

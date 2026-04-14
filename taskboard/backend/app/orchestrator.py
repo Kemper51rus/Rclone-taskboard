@@ -341,6 +341,8 @@ class Orchestrator:
     def snapshot(self) -> dict[str, Any]:
         queue_statuses = self._queue_status_snapshot()
         queue_status_by_key = {item["key"]: item for item in queue_statuses}
+        copy_progress = self._copy_progress_snapshot()
+        total_copy_speed_bytes_per_second = self._total_copy_speed_bytes_per_second(copy_progress)
         return {
             "queue_statuses": queue_statuses,
             "standard_queue_size": queue_status_by_key.get("standard", {}).get("queued_runs", 0),
@@ -363,8 +365,12 @@ class Orchestrator:
                 else None
             ),
             "next_copy_start_at": self._next_copy_start_at(),
-            "copy_progress": self._copy_progress_snapshot(),
-            "total_copy_speed_bytes_per_second": self._total_copy_speed_bytes_per_second(),
+            "copy_progress": copy_progress,
+            "total_copy_speed_bytes_per_second": total_copy_speed_bytes_per_second,
+            "total_copy_speed_megabits_per_second": round(
+                (total_copy_speed_bytes_per_second * 8) / (1000**2),
+                2,
+            ),
             "active_operations": self._active_operations_snapshot(),
         }
 
@@ -637,9 +643,12 @@ class Orchestrator:
             )
         return items
 
-    def _total_copy_speed_bytes_per_second(self) -> int:
+    def _total_copy_speed_bytes_per_second(
+        self,
+        copy_progress: list[dict[str, Any]] | None = None,
+    ) -> int:
         total = 0.0
-        for item in self._copy_progress_snapshot():
+        for item in copy_progress if copy_progress is not None else self._copy_progress_snapshot():
             if str(item.get("status") or "") != "running":
                 continue
             speed_raw = str(item.get("speed") or "").strip()

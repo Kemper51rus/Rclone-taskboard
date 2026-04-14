@@ -2442,9 +2442,10 @@
     }
 
     function totalCopySpeedMetric(snapshot) {
-      const apiValue = Number(snapshot?.total_copy_speed_bytes_per_second);
-      const totalBytesPerSecond = Number.isFinite(apiValue)
-        ? apiValue
+      const apiMegabitsValue = Number(snapshot?.total_copy_speed_megabits_per_second);
+      const apiBytesValue = Number(snapshot?.total_copy_speed_bytes_per_second);
+      const totalBytesPerSecond = Number.isFinite(apiBytesValue)
+        ? apiBytesValue
         : (Array.isArray(snapshot?.copy_progress) ? snapshot.copy_progress : []).reduce((sum, item) => {
             if (String(item?.status || "") !== "running") return sum;
             const speed = parseSpeedToBytesPerSecond(item?.speed);
@@ -2452,7 +2453,9 @@
           }, 0);
       return {
         key: "Скорость",
-        value: formatMegabitsPerSecondValue(totalBytesPerSecond, true),
+        value: Number.isFinite(apiMegabitsValue)
+          ? formatMegabitsPerSecondNumber(apiMegabitsValue, true)
+          : formatMegabitsPerSecondValue(totalBytesPerSecond, true),
         tight: true,
       };
     }
@@ -2531,12 +2534,16 @@
       return parseDataSizeToBytes(normalized);
     }
 
+    function formatMegabitsPerSecondNumber(megabitsPerSecond, keepUnitForZero = false) {
+      const safe = Number(megabitsPerSecond || 0);
+      if (safe <= 0) return keepUnitForZero ? "0 Мбит/с" : "0";
+      const digits = safe >= 100 ? 0 : 2;
+      return `${safe.toFixed(digits).replace(".", ",")} Мбит/с`;
+    }
+
     function formatMegabitsPerSecondValue(bytesPerSecond, keepUnitForZero = false) {
       const safe = Number(bytesPerSecond || 0);
-      if (safe <= 0) return keepUnitForZero ? "0 Мбит/с" : "0";
-      const megabitsPerSecond = (safe * 8) / (1000 ** 2);
-      const digits = megabitsPerSecond >= 100 ? 0 : 2;
-      return `${megabitsPerSecond.toFixed(digits).replace(".", ",")} Мбит/с`;
+      return formatMegabitsPerSecondNumber((safe * 8) / (1000 ** 2), keepUnitForZero);
     }
 
     function formatEtaValue(rawValue) {
