@@ -62,6 +62,7 @@ taskboard/backend/app/jobs/default_jobs.example.json
 - SQLite hardening: WAL, `busy_timeout`, закрытие соединений после каждого обращения
 - диагностика размера БД, WAL, свободных страниц, fd и памяти backend
 - профилактика БД из раздела `Статистика`: checkpoint WAL и `VACUUM`
+- лёгкий кэшированный endpoint `GET /api/homepage` для внешних Homepage/customapi-виджетов
 
 ---
 

@@ -22,12 +22,30 @@
 | Method | Endpoint | Назначение |
 | --- | --- | --- |
 | `GET` | `/api/health` | Проверка доступности сервиса |
+| `GET` | `/api/homepage` | Лёгкий кэшированный снимок для Homepage/customapi без полной загрузки dashboard-state |
 | `GET` | `/api/state` | Общее состояние, очереди, workers, последние запуски и флаг `token_required` |
 | `GET` | `/api/jobs` | Полный рабочий каталог: профили, очереди, Gotify, bandwidth, logging, watcher, clouds и jobs |
 | `GET` | `/api/stats/summary` | Сводная статистика запусков и передачи за выбранный период |
 | `GET` | `/api/system` | Диагностика SQLite-базы и процесса backend |
 | `POST` | `/api/system/database/checkpoint` | Сбросить WAL-журнал SQLite через checkpoint |
 | `POST` | `/api/system/database/vacuum` | Сжать SQLite-базу через `VACUUM` |
+
+### Важные поля `GET /api/homepage`
+
+Endpoint предназначен для внешних панелей вроде Homepage. Он не отдаёт историю запусков, каталог задач и полную диагностику процесса, поэтому его можно опрашивать чаще, чем `/api/state`.
+Сервер обновляет данные не чаще одного раза в `cache_seconds`, даже если клиент делает запросы чаще.
+
+- `open_runs_total` — число незавершённых запусков
+- `standard_queue_size`, `heavy_queue_size` — размеры основных очередей
+- `total_copy_speed_bytes_per_second` — суммарная скорость активных `copy/sync` задач в байтах в секунду
+- `total_copy_speed_megabits_per_second` — та же скорость в Мбит/с
+- `jobs_total`, `enabled_jobs_total` — количество задач в каталоге
+- `database_total_size_bytes` — общий размер `taskboard.db`, `taskboard.db-wal` и `taskboard.db-shm`
+- `database_size_bytes` — размер основного SQLite-файла
+- `database_wal_size_bytes` — размер WAL-журнала
+- `database_reclaimable_bytes` — примерный объём, который может вернуть `VACUUM`
+- `database_journal_mode` — текущий режим журнала SQLite
+- `generated_at`, `cache_seconds` — время сборки снимка и TTL серверного кэша
 
 ### Важные поля `GET /api/state`
 

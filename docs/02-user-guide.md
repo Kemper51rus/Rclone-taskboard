@@ -70,6 +70,7 @@
 
 - dashboard: `http://<host>:8080/`
 - проверка сервиса: `GET /api/health`
+- лёгкий снимок для Homepage: `GET /api/homepage`
 - текущее состояние: `GET /api/state`
 
 ### Базовый сценарий работы
@@ -157,6 +158,33 @@
 
 Кнопка `Сбросить WAL` выполняет checkpoint SQLite и освобождает разросшийся WAL-журнал.
 Кнопка `Сжать базу` запускает `VACUUM`; её лучше нажимать без активных копирований, потому что SQLite перепаковывает файл базы.
+
+### Homepage/customapi
+
+Для внешнего Homepage лучше использовать лёгкий endpoint `GET /api/homepage`, а не полный `/api/state`.
+Он отдаёт только компактные числа для виджетов и кэширует снимок на стороне taskboard, поэтому частый polling не заставляет backend каждый раз собирать историю запусков и полный dashboard-state.
+
+Пример:
+
+```yaml
+widget:
+  type: customapi
+  url: http://100.100.0.243:8080/api/homepage
+  refreshInterval: 5000
+  mappings:
+    - field: total_copy_speed_megabits_per_second
+      label: Speed
+      format: float
+      suffix: " Mbps"
+    - field: open_runs_total
+      label: Open Runs
+      format: number
+    - field: database_total_size_bytes
+      label: DB
+      format: bytes
+```
+
+Если Homepage опрашивает endpoint чаще, taskboard всё равно обновляет тяжёлую часть снимка не чаще `cache_seconds`.
 
 ### Поведение при первом запуске
 
@@ -255,6 +283,7 @@ sudo ./install.sh
 ### Что проверять после развертывания?
 
 - `GET /api/health`
+- `GET /api/homepage`
 - `GET /api/state`
 - `GET /api/system`
 - создание SQLite database

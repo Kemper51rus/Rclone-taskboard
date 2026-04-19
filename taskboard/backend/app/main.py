@@ -77,6 +77,12 @@ STATS_PERIODS = {
     "month": ("За месяц", timedelta(days=30)),
     "year": ("За год", timedelta(days=365)),
 }
+HOMEPAGE_CACHE_SECONDS = 5.0
+homepage_cache_lock = threading.RLock()
+homepage_cache: dict[str, Any] = {
+    "expires_at": 0.0,
+    "payload": None,
+}
 
 
 @asynccontextmanager
@@ -175,6 +181,40 @@ def _system_diagnostics() -> dict[str, Any]:
         "process": _process_diagnostics(),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def _homepage_snapshot() -> dict[str, Any]:
+    now = time.monotonic()
+    with homepage_cache_lock:
+        cached_payload = homepage_cache.get("payload")
+        if isinstance(cached_payload, dict) and now < float(homepage_cache.get("expires_at") or 0):
+            return cached_payload
+
+        snapshot = orchestrator.snapshot()
+        database = storage.database_diagnostics()
+        jobs = catalog.raw_jobs()
+        generated_at = datetime.now(timezone.utc)
+        payload = {
+            "status": "ok",
+            "app": settings.app_name,
+            "generated_at": generated_at.isoformat(),
+            "cache_seconds": int(HOMEPAGE_CACHE_SECONDS),
+            "open_runs_total": snapshot.get("open_runs_total", 0),
+            "standard_queue_size": snapshot.get("standard_queue_size", 0),
+            "heavy_queue_size": snapshot.get("heavy_queue_size", 0),
+            "total_copy_speed_bytes_per_second": snapshot.get("total_copy_speed_bytes_per_second", 0),
+            "total_copy_speed_megabits_per_second": snapshot.get("total_copy_speed_megabits_per_second", 0),
+            "jobs_total": len(jobs),
+            "enabled_jobs_total": sum(1 for job in jobs if job.enabled),
+            "database_size_bytes": database.get("database_size_bytes", 0),
+            "database_total_size_bytes": database.get("total_size_bytes", 0),
+            "database_wal_size_bytes": database.get("wal_size_bytes", 0),
+            "database_reclaimable_bytes": database.get("reclaimable_bytes", 0),
+            "database_journal_mode": database.get("journal_mode"),
+        }
+        homepage_cache["payload"] = payload
+        homepage_cache["expires_at"] = now + HOMEPAGE_CACHE_SECONDS
+        return payload
 
 
 def _is_rclone_step(step: dict[str, Any]) -> bool:
@@ -652,6 +692,11 @@ def health() -> dict[str, Any]:
         "utc_time": datetime.now(timezone.utc).isoformat(),
         "app": settings.app_name,
     }
+
+
+@app.get("/api/homepage")
+def homepage_snapshot() -> dict[str, Any]:
+    return _homepage_snapshot()
 
 
 @app.get("/api/state")
