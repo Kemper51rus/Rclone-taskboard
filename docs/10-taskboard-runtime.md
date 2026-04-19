@@ -10,7 +10,7 @@
 | --- | --- |
 | `taskboard/backend/app/main.py` | FastAPI entrypoint |
 | `taskboard/backend/app/orchestrator.py` | Scheduler, queues, workers |
-| `taskboard/backend/app/storage.py` | SQLite persistence |
+| `taskboard/backend/app/storage.py` | SQLite persistence, WAL, diagnostics and maintenance |
 | `taskboard/backend/app/jobs/default_jobs.example.json` | Шаблон рабочего каталога |
 | `taskboard/backend/app/jobs/default_jobs.empty.json` | Пустой шаблон рабочего каталога без задач |
 | `taskboard/.env.docker.example` | Шаблон env для Docker |
@@ -59,6 +59,9 @@ taskboard/backend/app/jobs/default_jobs.example.json
 - `Mail.ru safe preset` в редакторе backup-задач
 - сериализация запусков для Mail.ru remote на вкладке `Облака`
 - ручное и автоматическое step-логирование `rclone`
+- SQLite hardening: WAL, `busy_timeout`, закрытие соединений после каждого обращения
+- диагностика размера БД, WAL, свободных страниц, fd и памяти backend
+- профилактика БД из раздела `Статистика`: checkpoint WAL и `VACUUM`
 
 ---
 

@@ -3,8 +3,11 @@ from __future__ import annotations
 import configparser
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+import os
 from pathlib import Path
+import resource
 import threading
+import time
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
@@ -66,6 +69,8 @@ APP_LOGO_PATH = Path(__file__).with_name("rclone-taskboard-logo.svg")
 FS_ROOTS = ["/media", "/srv", "/home", "/root", "/mnt", "/tmp"]
 RUN_HISTORY_RETENTION_DAYS = 365
 RUN_HISTORY_LAST_PRUNED_AT_STATE_KEY = "run_history_last_pruned_at"
+PROCESS_STARTED_AT = datetime.now(timezone.utc)
+PROCESS_STARTED_MONOTONIC = time.monotonic()
 STATS_PERIODS = {
     "day": ("За день", timedelta(days=1)),
     "week": ("За неделю", timedelta(days=7)),
@@ -124,6 +129,52 @@ def _relative_app_path(path: Path) -> str:
 
 def _read_log_tail(path: Path, lines: int) -> str:
     return "\n".join(path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:])
+
+
+def _current_rss_bytes() -> int | None:
+    status_path = Path("/proc/self/status")
+    try:
+        for line in status_path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("VmRSS:"):
+                parts = line.split()
+                if len(parts) >= 2:
+                    return int(parts[1]) * 1024
+    except OSError:
+        return None
+    return None
+
+
+def _open_fd_count() -> int | None:
+    try:
+        return len(list(Path("/proc/self/fd").iterdir()))
+    except OSError:
+        return None
+
+
+def _process_diagnostics() -> dict[str, Any]:
+    try:
+        fd_soft_limit, fd_hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    except (OSError, ValueError):
+        fd_soft_limit = None
+        fd_hard_limit = None
+    uptime_seconds = max(0, int(time.monotonic() - PROCESS_STARTED_MONOTONIC))
+    return {
+        "pid": os.getpid(),
+        "started_at": PROCESS_STARTED_AT.isoformat(),
+        "uptime_seconds": uptime_seconds,
+        "open_fds": _open_fd_count(),
+        "fd_soft_limit": fd_soft_limit,
+        "fd_hard_limit": fd_hard_limit,
+        "rss_bytes": _current_rss_bytes(),
+    }
+
+
+def _system_diagnostics() -> dict[str, Any]:
+    return {
+        "database": storage.database_diagnostics(),
+        "process": _process_diagnostics(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def _is_rclone_step(step: dict[str, Any]) -> bool:
@@ -259,6 +310,7 @@ def _statistics_summary(period: str) -> dict[str, Any]:
             "history_days": RUN_HISTORY_RETENTION_DAYS,
             "last_pruned_at": last_pruned_at,
         },
+        "system": _system_diagnostics(),
     }
 
 
@@ -610,12 +662,28 @@ def state() -> dict[str, Any]:
     snapshot["latest_job_runs"] = storage.latest_job_run_map()
     snapshot["backup_jobs"] = catalog.list_backup_jobs()
     snapshot["watcher"] = event_watcher.snapshot()
+    snapshot["system"] = _system_diagnostics()
     return snapshot
 
 
 @app.get("/api/stats/summary")
 def stats_summary(period: str = Query(default="week")) -> dict[str, Any]:
     return _statistics_summary(period)
+
+
+@app.get("/api/system")
+def system_diagnostics() -> dict[str, Any]:
+    return _system_diagnostics()
+
+
+@app.post("/api/system/database/checkpoint", dependencies=[Depends(require_write_access)])
+def checkpoint_database() -> dict[str, Any]:
+    return storage.checkpoint_database()
+
+
+@app.post("/api/system/database/vacuum", dependencies=[Depends(require_write_access)])
+def vacuum_database() -> dict[str, Any]:
+    return storage.vacuum_database()
 
 
 @app.get("/api/jobs")

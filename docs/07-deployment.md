@@ -132,6 +132,9 @@ sudo ./install.sh systemd
 systemctl status rclone-taskboard.service --no-pager
 ```
 
+Unit `rclone-taskboard.service` задаёт `LimitNOFILE=8192`.
+Это запас для backend-процесса, scheduler, watcher и SQLite/WAL-файлов. Нормальная работа не должна приближаться к этому лимиту: текущие значения видны в разделе `Статистика` и в `GET /api/system`.
+
 ### Переход со старого external watcher
 
 Если на хосте раньше был legacy pipeline или отдельный watcher-service, выполните migration через единый installer:
@@ -150,6 +153,7 @@ sudo ./install.sh migrate-legacy
 
 - `GET /api/health`
 - `GET /api/state`
+- `GET /api/system`
 - ручной запуск профиля или задачи
 - создание SQLite database
 - создание `default_jobs.json` при чистом старте

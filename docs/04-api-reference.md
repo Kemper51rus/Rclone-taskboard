@@ -25,6 +25,9 @@
 | `GET` | `/api/state` | Общее состояние, очереди, workers, последние запуски и флаг `token_required` |
 | `GET` | `/api/jobs` | Полный рабочий каталог: профили, очереди, Gotify, bandwidth, logging, watcher, clouds и jobs |
 | `GET` | `/api/stats/summary` | Сводная статистика запусков и передачи за выбранный период |
+| `GET` | `/api/system` | Диагностика SQLite-базы и процесса backend |
+| `POST` | `/api/system/database/checkpoint` | Сбросить WAL-журнал SQLite через checkpoint |
+| `POST` | `/api/system/database/vacuum` | Сжать SQLite-базу через `VACUUM` |
 
 ### Важные поля `GET /api/state`
 
@@ -36,6 +39,8 @@
 - `latest_runs` — последние запуски
 - `backup_jobs` — backup-задачи каталога
 - `watcher` — runtime-статус встроенного наблюдателя
+- `system.database` — размер SQLite-файлов, WAL, freelist и режим журнала
+- `system.process` — PID, uptime, память и открытые файловые дескрипторы backend-процесса
 
 ### Query params `GET /api/stats/summary`
 
@@ -49,6 +54,29 @@
 - `transfer.average_speed_bytes_per_second`
 - `retention.history_days`
 - `retention.last_pruned_at`
+- `system.database`
+- `system.process`
+
+### Важные поля `GET /api/system`
+
+- `database.database_size_bytes` — размер основного файла `taskboard.db`
+- `database.wal_size_bytes` — размер WAL-журнала, если он существует
+- `database.shm_size_bytes` — размер shared memory файла SQLite, если он существует
+- `database.total_size_bytes` — общий размер `taskboard.db`, `taskboard.db-wal` и `taskboard.db-shm`
+- `database.journal_mode` — текущий режим журнала SQLite; штатное значение `wal`
+- `database.freelist_count` и `database.reclaimable_bytes` — свободные страницы внутри БД и приблизительный объём, который может вернуть `VACUUM`
+- `database.last_vacuum_at` — время последнего ручного сжатия базы через API/UI
+- `process.open_fds`, `process.fd_soft_limit`, `process.fd_hard_limit` — открытые fd и лимиты процесса
+- `process.rss_bytes` — текущий RSS backend-процесса
+- `process.uptime_seconds` — время жизни текущего процесса
+
+### Профилактика SQLite
+
+`POST /api/system/database/checkpoint` выполняет `PRAGMA wal_checkpoint(TRUNCATE)`.
+Операция полезна, если WAL-файл вырос, а нужно вернуть место на диске без полного сжатия базы.
+
+`POST /api/system/database/vacuum` выполняет `VACUUM`, затем checkpoint WAL и записывает `database_last_vacuum_at`.
+Операцию лучше запускать без активных копирований: SQLite перепаковывает файл базы, и на большой истории это может занять время.
 
 ---
 

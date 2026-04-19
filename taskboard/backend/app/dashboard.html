@@ -826,6 +826,24 @@
       color: var(--soft);
       font-size: 12px;
     }
+    .stats-section-title {
+      margin-top: 18px;
+      color: var(--accent);
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .database-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .database-actions button {
+      min-height: 40px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
     .logging-list-wrap {
       background: rgba(7, 14, 22, 0.58);
     }
@@ -1917,12 +1935,19 @@
                     <option value="year">Год</option>
                   </select>
                 </div>
-                <button class="secondary" type="button" onclick="refreshStatisticsSummary()">Обновить</button>
+                <button class="secondary" type="button" onclick="refreshStatisticsSummary()">Обновить всё</button>
               </div>
             </div>
             <div class="logging-summary" id="statsSummary">Статистика ещё не загружалась.</div>
             <div class="stats-grid" id="statsGrid"></div>
             <div class="field-meta" id="statsRetentionNote"></div>
+            <div class="stats-section-title">База данных и процесс</div>
+            <div class="stats-grid" id="systemStatsGrid"></div>
+            <div class="database-actions">
+              <button type="button" class="secondary" onclick="checkpointDatabase()">Сбросить WAL</button>
+              <button type="button" class="ghost" onclick="vacuumDatabase()">Сжать базу</button>
+            </div>
+            <div class="field-meta" id="databaseMaintenanceNote"></div>
           </div>
         </section>
 
@@ -2115,6 +2140,7 @@
       bandwidth: { limit: null },
       logging: { rclone_log_enabled: false, auto_rclone_log_enabled: false, auto_rclone_log_threshold: 3 },
       stats: { period: "week", summary: null },
+      system: null,
       rcloneLogs: [],
       selectedRcloneLogStepId: null,
       selectedRcloneLogDetail: null,
@@ -2368,6 +2394,17 @@
       return new Intl.NumberFormat("ru-RU").format(Math.round(numeric));
     }
 
+    function formatDuration(seconds) {
+      const total = Math.max(0, Math.floor(Number(seconds || 0)));
+      const days = Math.floor(total / 86400);
+      const hours = Math.floor((total % 86400) / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      if (days > 0) return `${days} д ${hours} ч`;
+      if (hours > 0) return `${hours} ч ${minutes} мин`;
+      if (minutes > 0) return `${minutes} мин`;
+      return `${total} с`;
+    }
+
     function formatTriggerLabel(run) {
       const triggerType = String(run?.trigger_type || "").trim().toLowerCase();
       const source = String(run?.source || "").trim().toLowerCase();
@@ -2460,10 +2497,25 @@
       };
     }
 
+    function databaseSizeMetric(snapshot) {
+      const database = snapshot?.system?.database || {};
+      const totalSize = Number(database.total_size_bytes ?? database.database_size_bytes ?? 0);
+      const walSize = Number(database.wal_size_bytes || 0);
+      const reclaimable = Number(database.reclaimable_bytes || 0);
+      const journalMode = String(database.journal_mode || "unknown").toUpperCase();
+      return {
+        key: "База",
+        value: formatFileSize(totalSize),
+        tight: true,
+        tooltip: `SQLite ${journalMode}: файл ${formatFileSize(database.database_size_bytes || 0)}, WAL ${formatFileSize(walSize)}, можно освободить ${formatFileSize(reclaimable)}.`,
+      };
+    }
+
     function metrics(snapshot) {
       return [
         { key: "Выполняются", value: snapshot.open_runs_total },
         { key: "Задачи", value: (snapshot.backup_jobs || []).length },
+        databaseSizeMetric(snapshot),
         totalCopySpeedMetric(snapshot),
         antiBotMetric(snapshot),
         { key: "Планировщик", value: snapshot.scheduler_alive ? "работает" : "остановлен" },
@@ -3306,6 +3358,68 @@
       updateRunsLayout();
     }
 
+    function statsCardMarkup(items) {
+      return items.map((item) => `
+        <article class="stats-card">
+          <div class="stats-card-label">${escapeHtml(item.label)}</div>
+          <div class="stats-card-value">${escapeHtml(item.value)}</div>
+          <div class="stats-card-note">${escapeHtml(item.note)}</div>
+        </article>
+      `).join("");
+    }
+
+    function renderSystemStatsPanel(system = null) {
+      const grid = document.getElementById("systemStatsGrid");
+      const note = document.getElementById("databaseMaintenanceNote");
+      if (!grid || !note) return;
+      const diagnostics = system || state.system || state.lastSnapshot?.system || null;
+      if (!diagnostics) {
+        grid.innerHTML = "";
+        note.textContent = "Диагностика системы ещё не загружалась.";
+        return;
+      }
+      state.system = diagnostics;
+      const database = diagnostics.database || {};
+      const process = diagnostics.process || {};
+      const fdSoftLimit = process.fd_soft_limit === null || process.fd_soft_limit === undefined
+        ? "—"
+        : formatInteger(process.fd_soft_limit);
+      const lastVacuum = database.last_vacuum_at ? formatRunTimestamp(database.last_vacuum_at) : "ещё не выполнялось";
+      grid.innerHTML = statsCardMarkup([
+        {
+          label: "База",
+          value: formatFileSize(database.total_size_bytes || database.database_size_bytes || 0),
+          note: `файл ${formatFileSize(database.database_size_bytes || 0)}, WAL ${formatFileSize(database.wal_size_bytes || 0)}`,
+        },
+        {
+          label: "Можно освободить",
+          value: formatFileSize(database.reclaimable_bytes || 0),
+          note: `${formatInteger(database.freelist_count || 0)} свободных страниц`,
+        },
+        {
+          label: "Режим SQLite",
+          value: String(database.journal_mode || "unknown").toUpperCase(),
+          note: `busy timeout ${formatInteger(database.busy_timeout_ms || 0)} мс`,
+        },
+        {
+          label: "FD процесса",
+          value: `${formatInteger(process.open_fds || 0)} / ${fdSoftLimit}`,
+          note: `pid ${process.pid || "—"}`,
+        },
+        {
+          label: "Память",
+          value: formatFileSize(process.rss_bytes || 0),
+          note: `uptime ${formatDuration(process.uptime_seconds || 0)}`,
+        },
+        {
+          label: "Последнее сжатие",
+          value: lastVacuum,
+          note: "VACUUM перепаковывает файл БД",
+        },
+      ]);
+      note.textContent = `Когда раздел открыт, статистика и диагностика обновляются автоматически. Сброс WAL освобождает журнал, а сжатие БД может занять время и лучше запускать его без активных копирований.`;
+    }
+
     function renderStatsPanel() {
       const panel = document.getElementById("statsPanel");
       const toggle = document.getElementById("statsToggle");
@@ -3325,15 +3439,17 @@
         summaryNode.textContent = "Статистика ещё не загружалась.";
         grid.innerHTML = "";
         retentionNode.textContent = "";
+        renderSystemStatsPanel(state.system);
         updateRunsLayout();
         return;
       }
 
+      state.system = summary.system || state.system;
       const runs = summary.runs || {};
       const transfer = summary.transfer || {};
       const unsuccessful = Number(runs.unsuccessful || 0);
       summaryNode.textContent = `${summary.period_label || "Период"} • запусков ${formatInteger(runs.total || 0)}.`;
-      grid.innerHTML = [
+      grid.innerHTML = statsCardMarkup([
         { label: "Удачные", value: formatInteger(runs.succeeded || 0), note: "запуски без ошибок" },
         { label: "Неудачные", value: formatInteger(unsuccessful), note: "ошибки и остановки" },
         { label: "Остановлены", value: formatInteger(runs.stopped || 0), note: "остановлены вручную или системой" },
@@ -3352,18 +3468,13 @@
           value: formatInteger(transfer.files || 0),
           note: `учтено шагов: ${formatInteger(transfer.sampled_file_steps || 0)}`,
         },
-      ].map((item) => `
-        <article class="stats-card">
-          <div class="stats-card-label">${escapeHtml(item.label)}</div>
-          <div class="stats-card-value">${escapeHtml(item.value)}</div>
-          <div class="stats-card-note">${escapeHtml(item.note)}</div>
-        </article>
-      `).join("");
+      ]);
 
       const lastPruned = summary.retention?.last_pruned_at
         ? formatRunTimestamp(summary.retention.last_pruned_at)
         : "ещё не выполнялась";
       retentionNode.textContent = `Автоочистка истории и step-логов старше ${formatInteger(summary.retention?.history_days || 365)} дней включена. Последняя очистка: ${lastPruned}.`;
+      renderSystemStatsPanel(summary.system || state.system);
       updateRunsLayout();
     }
 
@@ -3419,6 +3530,60 @@
           setToast(error.message || "Ошибка загрузки статистики", "error");
         }
         throw error;
+      }
+    }
+
+    async function refreshSystemDiagnostics({ silent = false } = {}) {
+      try {
+        const response = await fetch("/api/system");
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "system diagnostics failed");
+        state.system = payload;
+        if (state.lastSnapshot) {
+          state.lastSnapshot.system = payload;
+          renderStatus(state.lastSnapshot);
+        }
+        if (state.stats?.summary) {
+          state.stats.summary.system = payload;
+        }
+        renderSystemStatsPanel(payload);
+        if (!silent) {
+          setToast("Диагностика обновлена.", "ok");
+        }
+        return payload;
+      } catch (error) {
+        if (!silent) {
+          setToast(error.message || "Ошибка загрузки диагностики", "error");
+        }
+        throw error;
+      }
+    }
+
+    async function runDatabaseMaintenance(endpoint, successLabel) {
+      const response = await fetch(endpoint, { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || "database maintenance failed");
+      await refreshSystemDiagnostics({ silent: true });
+      setToast(`${successLabel}: освобождено ${formatFileSize(payload.freed_bytes || 0)}.`, "ok");
+      return payload;
+    }
+
+    async function checkpointDatabase() {
+      try {
+        await runDatabaseMaintenance("/api/system/database/checkpoint", "WAL сброшен");
+      } catch (error) {
+        setToast(error.message || "Ошибка сброса WAL", "error");
+      }
+    }
+
+    async function vacuumDatabase() {
+      if (!window.confirm("Сжатие БД может занять время. Лучше запускать его без активных копирований. Продолжить?")) {
+        return;
+      }
+      try {
+        await runDatabaseMaintenance("/api/system/database/vacuum", "База сжата");
+      } catch (error) {
+        setToast(error.message || "Ошибка сжатия базы", "error");
       }
     }
 
@@ -5669,6 +5834,7 @@
       const response = await fetch("/api/state");
       const snapshot = await response.json();
       state.lastSnapshot = snapshot;
+      state.system = snapshot.system || state.system;
       applyLatestJobRuns(snapshot);
       state.watcherRuntime = snapshot.watcher || state.watcherRuntime;
       renderStatus(snapshot);
