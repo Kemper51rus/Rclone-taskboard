@@ -507,6 +507,27 @@
       text-align: left;
       max-width: 720px;
     }
+    .service-status-line {
+      display: inline-flex;
+      justify-content: flex-end;
+      gap: 6px;
+      flex-wrap: wrap;
+      line-height: 1.35;
+      white-space: normal;
+      vertical-align: top;
+    }
+    .service-status-part {
+      white-space: nowrap;
+    }
+    .service-status-part.ok {
+      color: var(--ok);
+    }
+    .service-status-part.bad {
+      color: var(--bad);
+    }
+    .service-status-separator {
+      color: var(--muted);
+    }
     .run-link {
       border: none;
       background: transparent;
@@ -540,11 +561,45 @@
       border-radius: 16px;
       border: 1px solid var(--line);
       background: rgba(255, 255, 255, 0.03);
+      user-select: none;
+      touch-action: none;
       transition:
         transform var(--motion-fast) var(--ease-smooth),
         border-color var(--motion-fast) var(--ease-snappy),
         background var(--motion-standard) var(--ease-smooth),
         box-shadow var(--motion-standard) var(--ease-smooth);
+    }
+    .metric[draggable="true"] {
+      cursor: grab;
+    }
+    .metric[draggable="true"]:active {
+      cursor: grabbing;
+    }
+    .metric.is-dragging {
+      opacity: 0.58;
+      border-color: rgba(124, 224, 255, 0.62);
+      background: rgba(124, 224, 255, 0.09);
+      box-shadow: 0 12px 32px rgba(5, 12, 20, 0.28), inset 0 0 0 1px rgba(124, 224, 255, 0.16);
+      z-index: 4;
+    }
+    .status-grid.is-dragging .metric:not(.is-dragging) {
+      cursor: grabbing;
+    }
+    .metric.clickable {
+      cursor: pointer;
+    }
+    .metric.clickable:hover {
+      transform: translate3d(0, -2px, 0);
+      border-color: var(--line-strong);
+      background: rgba(255, 255, 255, 0.045);
+    }
+    .metric.clickable.ui-tooltip.has-tooltip {
+      cursor: pointer;
+    }
+    .metric[draggable="true"],
+    .metric[draggable="true"].clickable,
+    .metric[draggable="true"].clickable.ui-tooltip.has-tooltip {
+      cursor: grab;
     }
     .ui-tooltip {
       position: relative;
@@ -1638,6 +1693,9 @@
         max-width: none;
         text-align: left;
       }
+      .service-status-line {
+        justify-content: flex-start;
+      }
       .hero-actions {
         justify-content: stretch;
       }
@@ -2336,7 +2394,26 @@
       }
     }
 
+    function loadStringListPreference(key) {
+      try {
+        const raw = window.localStorage.getItem(key);
+        const parsed = JSON.parse(raw || "[]");
+        return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string" && item.trim()) : [];
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function saveStringListPreference(key, value) {
+      try {
+        window.localStorage.setItem(key, JSON.stringify(value));
+      } catch (error) {
+        // Ignore storage errors and keep the current visual order.
+      }
+    }
+
     const SHOW_LOG_FILTERS_STORAGE_KEY = "rcloneTaskboard.showLogFilters";
+    const STATUS_WIDGET_ORDER_STORAGE_KEY = "rcloneTaskboard.statusWidgetOrder";
 
     const state = {
       jobs: [],
@@ -2367,7 +2444,10 @@
       keyEditedManually: false,
       toastTimer: null,
       toastHideTimer: null,
-      serviceMessage: { text: "", tone: "ok" },
+      serviceMessage: { text: "", tone: "ok", parts: [] },
+      statusWidgetOrder: loadStringListPreference(STATUS_WIDGET_ORDER_STORAGE_KEY),
+      statusWidgetDrag: { active: false, widgetId: null },
+      suppressMetricClickUntil: 0,
       lastSnapshot: null,
       excludePathEntries: [],
       browseTarget: "source",
@@ -2506,7 +2586,13 @@
         return;
       }
       panel.className = `hero-message is-visible ${state.serviceMessage.tone === "error" ? "service-error" : "service-ok"}`.trim();
-      panel.textContent = state.serviceMessage.text;
+      if (Array.isArray(state.serviceMessage.parts) && state.serviceMessage.parts.length) {
+        panel.innerHTML = `<span class="service-status-line">${state.serviceMessage.parts.map((part, index) => (
+          `<span class="service-status-part ${part.tone === "bad" ? "bad" : "ok"}">${escapeHtml(part.text)}${index < state.serviceMessage.parts.length - 1 ? '<span class="service-status-separator"> |</span>' : ""}</span>`
+        )).join("")}</span>`;
+      } else {
+        panel.textContent = state.serviceMessage.text;
+      }
     }
 
     function updateServiceMessage(snapshot) {
@@ -2514,29 +2600,13 @@
         ? snapshot.queue_statuses.filter((item) => item?.enabled !== false)
         : [];
       const aliveWorkers = queueStatuses.reduce((sum, item) => sum + Number(item?.alive_workers || 0), 0);
-      const openRuns = Number(snapshot?.open_runs_total || 0);
-      const queuedRuns = queueStatuses.reduce((sum, item) => sum + Number(item?.queued_runs || 0), 0);
-      if (queueStatuses.length > 0 && aliveWorkers < 1) {
-        state.serviceMessage = {
-          text: "Служба недоступна",
-          tone: "error",
-        };
-      } else if (openRuns > 0) {
-        state.serviceMessage = {
-          text: `Идёт выполнение: ${openRuns} ${openRuns === 1 ? "задача" : "задач"}`,
-          tone: "ok",
-        };
-      } else if (queuedRuns > 0) {
-        state.serviceMessage = {
-          text: `Очередь занята: ${queuedRuns} ${queuedRuns === 1 ? "задача" : "задач"} ожидает`,
-          tone: "ok",
-        };
-      } else {
-        state.serviceMessage = {
-          text: "Служба: работает",
-          tone: "ok",
-        };
-      }
+      const serviceOk = !(queueStatuses.length > 0 && aliveWorkers < 1);
+      const parts = serviceOk ? [] : [{ text: "Служба: недоступна", tone: "bad" }];
+      state.serviceMessage = {
+        text: parts.map((part) => part.text).join(" | "),
+        tone: serviceOk ? "ok" : "error",
+        parts,
+      };
       if (!state.toastHideTimer) {
         renderServiceMessage();
       }
@@ -2634,6 +2704,18 @@
     }
 
     function antiBotMetric(snapshot) {
+      const enabled = snapshot?.antibot_enabled !== false;
+      if (!enabled) {
+        return {
+          metricId: "antibot",
+          key: "Антибот",
+          value: "выкл",
+          valueClass: "bad",
+          tight: true,
+          tooltip: "Клик включит паузу между стартами rclone-копирования.",
+          clickable: true,
+        };
+      }
       const nextRaw = String(snapshot?.next_copy_start_at || "").trim();
       if (!nextRaw) {
         return {
@@ -2642,6 +2724,8 @@
           value: "готов",
           valueClass: "",
           tight: false,
+          tooltip: "Клик выключит паузу между стартами rclone-копирования.",
+          clickable: true,
         };
       }
       const nextAt = new Date(nextRaw);
@@ -2652,6 +2736,8 @@
           value: nextRaw,
           valueClass: "tight",
           tight: true,
+          tooltip: "Клик выключит паузу между стартами rclone-копирования.",
+          clickable: true,
         };
       }
       const secondsLeft = Math.max(0, Math.ceil((nextAt.getTime() - Date.now()) / 1000));
@@ -2662,6 +2748,8 @@
           value: "готов",
           valueClass: "",
           tight: false,
+          tooltip: "Клик выключит паузу между стартами rclone-копирования.",
+          clickable: true,
         };
       }
       return {
@@ -2670,19 +2758,49 @@
         value: formatCountdown(secondsLeft),
         valueClass: "countdown",
         tight: false,
+        tooltip: "Клик выключит антибот и снимет текущую паузу.",
+        clickable: true,
       };
     }
 
     function queueMetrics(snapshot) {
       const queueStatuses = Array.isArray(snapshot?.queue_statuses)
-        ? snapshot.queue_statuses.filter((item) => item?.enabled !== false)
+        ? snapshot.queue_statuses
         : [];
-      return queueStatuses.map((item) => ({
-        key: item.title || item.key || "queue",
-        value: `${Number(item.queued_runs || 0)}/${Number(item.open_runs || 0)} | ${Number(item.alive_workers || 0)}/${Number(item.workers || 0)}`,
-        tight: true,
-        tooltip: `Очередь ${item.title || item.key || "queue"}: в очереди ${Number(item.queued_runs || 0)}, в работе ${Number(item.open_runs || 0)}, активных воркеров ${Number(item.alive_workers || 0)} из ${Number(item.workers || 0)}.`,
-      }));
+      const statusByKey = new Map(queueStatuses.map((item) => [String(item?.key || ""), item]));
+      const definitions = queueDefinitions();
+      const sources = definitions.length
+        ? definitions
+        : queueStatuses.map((item) => ({
+            key: item.key,
+            title: item.title,
+            workers: item.workers,
+            bandwidth_limit: item.bandwidth_limit,
+            enabled: item.enabled,
+          }));
+      return sources.filter((item) => item?.key).map((item) => {
+        const status = statusByKey.get(String(item.key)) || {};
+        const enabled = item.enabled !== false;
+        const workers = Number(status.workers ?? item.workers ?? 0);
+        const aliveWorkers = Number(status.alive_workers || 0);
+        const queuedRuns = Number(status.queued_runs || 0);
+        const openRuns = Number(status.open_runs || 0);
+        const title = item.title || item.key || "queue";
+        const workerProblem = enabled && workers > 0 && aliveWorkers < workers;
+        return {
+          metricId: `queue:${item.key}`,
+          key: title,
+          value: enabled
+            ? `${queuedRuns}/${openRuns} | ${aliveWorkers}/${workers}`
+            : "выкл",
+          valueClass: enabled ? (workerProblem ? "bad" : "") : "bad",
+          tight: true,
+          tooltip: enabled
+            ? `Клик выключит очередь ${title}. Сейчас: в очереди ${queuedRuns}, в работе ${openRuns}, активных воркеров ${aliveWorkers} из ${workers}.`
+            : `Клик включит очередь ${title}.`,
+          clickable: true,
+        };
+      });
     }
 
     function totalCopySpeedMetric(snapshot) {
@@ -2696,6 +2814,7 @@
             return sum + (Number.isFinite(speed) ? speed : 0);
           }, 0);
       return {
+        metricId: "copy-speed",
         key: "Скорость",
         value: Number.isFinite(apiMegabitsValue)
           ? formatMegabitsPerSecondNumber(apiMegabitsValue, true)
@@ -2711,6 +2830,7 @@
       const reclaimable = Number(database.reclaimable_bytes || 0);
       const journalMode = String(database.journal_mode || "unknown").toUpperCase();
       return {
+        metricId: "database",
         key: "База",
         value: formatFileSize(totalSize),
         tight: true,
@@ -2718,14 +2838,81 @@
       };
     }
 
+    function schedulerMetric(snapshot) {
+      const enabled = snapshot?.scheduler_enabled !== false;
+      const alive = Boolean(snapshot?.scheduler_alive);
+      const value = enabled && alive
+        ? "работает"
+        : (enabled ? "сбой" : "остановлен");
+      return {
+        metricId: "scheduler",
+        key: "Планировщик",
+        value,
+        valueClass: enabled && alive ? "" : "bad",
+        tight: true,
+        tooltip: enabled
+          ? "Клик выключит постановку задач по расписанию. Systemd-настройка остаётся стартовым дефолтом."
+          : "Клик включит постановку задач по расписанию до следующего переключения.",
+        clickable: true,
+      };
+    }
+
+    function settingsToggleMetric({ metricId, key, enabled, badWhenEnabled = false, onTooltip, offTooltip }) {
+      const isEnabled = Boolean(enabled);
+      const bad = badWhenEnabled ? isEnabled : !isEnabled;
+      return {
+        metricId,
+        key,
+        value: isEnabled ? "вкл" : "выкл",
+        valueClass: bad ? "bad" : "",
+        tight: true,
+        tooltip: isEnabled ? onTooltip : offTooltip,
+        clickable: true,
+      };
+    }
+
+    function loggingMetric() {
+      return settingsToggleMetric({
+        metricId: "logging",
+        key: "Логи",
+        enabled: state.logging?.rclone_log_enabled,
+        badWhenEnabled: true,
+        onTooltip: "Клик выключит подробный rclone-лог для новых запусков.",
+        offTooltip: "Клик включит подробный rclone-лог для новых запусков.",
+      });
+    }
+
+    function gotifyMetric() {
+      return settingsToggleMetric({
+        metricId: "gotify",
+        key: "Уведомления",
+        enabled: state.gotify?.enabled,
+        onTooltip: "Клик выключит Gotify-уведомления.",
+        offTooltip: "Клик включит Gotify-уведомления.",
+      });
+    }
+
+    function watcherMetric() {
+      return settingsToggleMetric({
+        metricId: "watcher",
+        key: "Наблюдатель",
+        enabled: state.watcher?.enabled,
+        onTooltip: "Клик выключит наблюдение за каталогами.",
+        offTooltip: "Клик включит наблюдение за каталогами.",
+      });
+    }
+
     function metrics(snapshot) {
       return [
-        { key: "Выполняются", value: snapshot.open_runs_total },
-        { key: "Задачи", value: (snapshot.backup_jobs || []).length },
+        { metricId: "open-runs", key: "Выполняются", value: snapshot.open_runs_total },
+        { metricId: "jobs-count", key: "Задачи", value: (snapshot.backup_jobs || []).length },
         databaseSizeMetric(snapshot),
         totalCopySpeedMetric(snapshot),
         antiBotMetric(snapshot),
-        { key: "Планировщик", value: snapshot.scheduler_alive ? "работает" : "остановлен" },
+        loggingMetric(),
+        gotifyMetric(),
+        watcherMetric(),
+        schedulerMetric(snapshot),
         ...queueMetrics(snapshot),
       ];
     }
@@ -3960,38 +4147,344 @@
       const loggingToggle = document.getElementById("loggingToggle");
       const watcherToggle = document.getElementById("watcherToggle");
       const gotifyToggle = document.getElementById("gotifyToggle");
-      const loggingEnabled = Boolean(state.logging?.rclone_log_enabled);
-      const watcherEnabled = Boolean(state.watcher?.enabled);
-      const gotifyEnabled = Boolean(state.gotify?.enabled);
-      const needsGotifyAttention = loggingEnabled && !gotifyEnabled;
-      const gotifyDisabled = !gotifyEnabled;
-      const watcherDisabled = !watcherEnabled;
+      [loggingToggle, watcherToggle, gotifyToggle].forEach((toggle) => {
+        toggle.classList.remove("has-status-on", "has-status-warning");
+        toggle.removeAttribute("title");
+      });
+      if (state.lastSnapshot && !state.toastHideTimer) {
+        updateServiceMessage(state.lastSnapshot);
+      }
+    }
 
-      loggingToggle.classList.toggle("has-status-on", loggingEnabled);
-      watcherToggle.classList.toggle("has-status-on", watcherEnabled);
-      gotifyToggle.classList.toggle("has-status-on", gotifyEnabled);
-      loggingToggle.classList.toggle("has-status-warning", needsGotifyAttention);
-      watcherToggle.classList.toggle("has-status-warning", watcherDisabled);
-      gotifyToggle.classList.toggle("has-status-warning", gotifyDisabled);
+    function orderedStatusMetrics(items) {
+      const indexed = new Map(state.statusWidgetOrder.map((id, index) => [id, index]));
+      return [...items].sort((left, right) => {
+        const leftIndex = indexed.has(left.metricId) ? indexed.get(left.metricId) : Number.POSITIVE_INFINITY;
+        const rightIndex = indexed.has(right.metricId) ? indexed.get(right.metricId) : Number.POSITIVE_INFINITY;
+        if (leftIndex !== rightIndex) return leftIndex - rightIndex;
+        return items.indexOf(left) - items.indexOf(right);
+      });
+    }
 
-      loggingToggle.title = needsGotifyAttention
-        ? "Логи включены, но Gotify выключен."
-        : (loggingEnabled ? "Подробный лог rclone включён." : "Подробный лог rclone выключен.");
-      watcherToggle.title = watcherEnabled
-        ? "Встроенный watcher включён."
-        : "Встроенный watcher выключен.";
-      gotifyToggle.title = needsGotifyAttention
-        ? "Gotify выключен при включённом логировании."
-        : (gotifyEnabled ? "Gotify включён." : "Gotify выключен.");
+    function measureStatusWidgets(container) {
+      const positions = new Map();
+      container.querySelectorAll(".metric[data-status-widget-id]").forEach((node) => {
+        positions.set(node.dataset.statusWidgetId, node.getBoundingClientRect());
+      });
+      return positions;
+    }
+
+    function animateStatusWidgetChanges(previousPositions) {
+      if (!previousPositions?.size || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const container = document.getElementById("statusGrid");
+      container.querySelectorAll(".metric[data-status-widget-id]").forEach((node) => {
+        const previous = previousPositions.get(node.dataset.statusWidgetId);
+        if (!previous) return;
+        const next = node.getBoundingClientRect();
+        const deltaX = previous.left - next.left;
+        const deltaY = previous.top - next.top;
+        if (!deltaX && !deltaY) return;
+        node.style.transition = "none";
+        node.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
+        node.getBoundingClientRect();
+        node.style.transition = "transform var(--motion-standard) var(--ease-smooth)";
+        node.style.transform = "";
+        window.setTimeout(() => {
+          node.style.transition = "";
+          node.style.transform = "";
+        }, 360);
+      });
+    }
+
+    function saveStatusWidgetOrderFromDom() {
+      const order = [...document.querySelectorAll("#statusGrid .metric[data-status-widget-id]")]
+        .map((node) => node.dataset.statusWidgetId)
+        .filter(Boolean);
+      state.statusWidgetOrder = order;
+      saveStringListPreference(STATUS_WIDGET_ORDER_STORAGE_KEY, order);
     }
 
     function renderStatus(snapshot) {
-      document.getElementById("statusGrid").innerHTML = metrics(snapshot).map((item) => `
-        <div class="metric ui-tooltip${item.tooltip ? " has-tooltip" : ""}"${item.metricId ? ` data-metric-id="${escapeHtml(item.metricId)}"` : ""}${item.tooltip ? ` data-tooltip="${escapeHtml(item.tooltip)}" tabindex="0"` : ""}>
-          <div class="k">${item.key}</div>
-          <div class="v ${(item.tight ? "tight " : "") + (item.valueClass || "")}">${item.value}</div>
+      if (state.statusWidgetDrag.active) return;
+      const statusGrid = document.getElementById("statusGrid");
+      const previousPositions = measureStatusWidgets(statusGrid);
+      statusGrid.innerHTML = orderedStatusMetrics(metrics(snapshot)).map((item) => `
+        <div class="metric ${item.clickable ? "clickable " : ""}ui-tooltip${item.tooltip ? " has-tooltip" : ""}" draggable="true" data-status-widget-id="${escapeHtml(item.metricId)}"${item.metricId ? ` data-metric-id="${escapeHtml(item.metricId)}"` : ""}${item.tooltip ? ` data-tooltip="${escapeHtml(item.tooltip)}" tabindex="0"` : ""}${item.clickable && item.metricId ? ` role="button" onclick="toggleStatusMetric('${escapeHtml(escapeJsString(item.metricId))}')" onkeydown="handleMetricKeydown(event, '${escapeHtml(escapeJsString(item.metricId))}')"` : ""}>
+          <div class="k">${escapeHtml(String(item.key ?? ""))}</div>
+          <div class="v ${(item.tight ? "tight " : "") + (item.valueClass || "")}">${escapeHtml(String(item.value ?? ""))}</div>
         </div>
       `).join("");
+      animateStatusWidgetChanges(previousPositions);
+    }
+
+    function handleStatusDragStart(event) {
+      const metric = event.target.closest(".metric[data-status-widget-id]");
+      if (!metric) return;
+      state.statusWidgetDrag = { active: true, widgetId: metric.dataset.statusWidgetId };
+      metric.classList.add("is-dragging");
+      metric.setAttribute("aria-grabbed", "true");
+      document.getElementById("statusGrid").classList.add("is-dragging");
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", metric.dataset.statusWidgetId);
+    }
+
+    function handleStatusDragOver(event) {
+      if (!state.statusWidgetDrag.active) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      const container = document.getElementById("statusGrid");
+      const dragged = container.querySelector(".metric.is-dragging");
+      const target = event.target.closest(".metric[data-status-widget-id]");
+      if (!dragged || !target || dragged === target || !container.contains(target)) return;
+
+      const previousPositions = measureStatusWidgets(container);
+      const targetRect = target.getBoundingClientRect();
+      const shouldInsertBefore = event.clientX < targetRect.left + targetRect.width / 2;
+      if (shouldInsertBefore) {
+        container.insertBefore(dragged, target);
+      } else {
+        container.insertBefore(dragged, target.nextSibling);
+      }
+      saveStatusWidgetOrderFromDom();
+      animateStatusWidgetChanges(previousPositions);
+    }
+
+    function handleStatusDragEnd() {
+      const container = document.getElementById("statusGrid");
+      const dragged = container.querySelector(".metric.is-dragging");
+      if (dragged) {
+        dragged.classList.remove("is-dragging");
+        dragged.removeAttribute("aria-grabbed");
+      }
+      container.classList.remove("is-dragging");
+      state.statusWidgetDrag = { active: false, widgetId: null };
+      state.suppressMetricClickUntil = Date.now() + 250;
+      saveStatusWidgetOrderFromDom();
+      if (state.lastSnapshot) {
+        window.setTimeout(() => renderStatus(state.lastSnapshot), 0);
+      }
+    }
+
+    function bindStatusWidgetDrag() {
+      const statusGrid = document.getElementById("statusGrid");
+      statusGrid.addEventListener("dragstart", handleStatusDragStart);
+      statusGrid.addEventListener("dragover", handleStatusDragOver);
+      statusGrid.addEventListener("drop", (event) => event.preventDefault());
+      statusGrid.addEventListener("dragend", handleStatusDragEnd);
+    }
+
+    function handleMetricKeydown(event, metricId) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggleStatusMetric(metricId);
+      }
+    }
+
+    function refreshStatusDisplays() {
+      if (!state.lastSnapshot) return;
+      renderStatus(state.lastSnapshot);
+      updateServiceMessage(state.lastSnapshot);
+    }
+
+    function toggleStatusMetric(metricId) {
+      if (Date.now() < state.suppressMetricClickUntil) return;
+      if (metricId === "scheduler") {
+        toggleScheduler();
+      } else if (metricId === "logging") {
+        toggleLoggingMetric();
+      } else if (metricId === "gotify") {
+        toggleGotifyMetric();
+      } else if (metricId === "watcher") {
+        toggleWatcherMetric();
+      } else if (metricId === "antibot") {
+        toggleAntiBotMetric();
+      } else if (metricId.startsWith("queue:")) {
+        toggleQueueMetric(metricId.slice("queue:".length));
+      }
+    }
+
+    async function toggleScheduler() {
+      const currentEnabled = state.lastSnapshot?.scheduler_enabled !== false;
+      const nextEnabled = !currentEnabled;
+      try {
+        const response = await fetch("/api/scheduler", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: nextEnabled }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "scheduler toggle failed");
+        state.lastSnapshot = {
+          ...(state.lastSnapshot || {}),
+          scheduler_enabled: Boolean(payload.scheduler_enabled),
+          scheduler_alive: Boolean(payload.scheduler_alive),
+        };
+        refreshStatusDisplays();
+        setToast(
+          payload.scheduler_enabled
+            ? "Планировщик включён."
+            : "Планировщик остановлен.",
+          "ok"
+        );
+        refreshSnapshot().catch(() => {});
+      } catch (error) {
+        setToast(error.message || "Ошибка переключения планировщика", "error");
+      }
+    }
+
+    async function toggleLoggingMetric() {
+      const nextEnabled = !Boolean(state.logging?.rclone_log_enabled);
+      const payload = {
+        rclone_log_enabled: nextEnabled,
+        auto_rclone_log_enabled: Boolean(state.logging?.auto_rclone_log_enabled),
+        auto_rclone_log_threshold: normalizeAutoRcloneLogThreshold(state.logging?.auto_rclone_log_threshold || 3),
+      };
+      try {
+        const response = await fetch("/api/logging", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "logging toggle failed");
+        state.logging = result.logging || payload;
+        renderLoggingPanel();
+        refreshStatusDisplays();
+        setToast(
+          state.logging?.rclone_log_enabled
+            ? "Подробный rclone-лог включён."
+            : "Подробный rclone-лог выключен.",
+          "ok"
+        );
+        refreshSnapshot().catch(() => {});
+      } catch (error) {
+        setToast(error.message || "Ошибка переключения логов", "error");
+      }
+    }
+
+    async function toggleGotifyMetric() {
+      const nextEnabled = !Boolean(state.gotify?.enabled);
+      const payload = {
+        enabled: nextEnabled,
+        url: state.gotify?.url || null,
+        token: state.gotify?.token || null,
+        default_priority: Number(state.gotify?.default_priority || 5),
+      };
+      try {
+        const response = await fetch("/api/gotify", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "gotify toggle failed");
+        state.gotify = result.gotify || payload;
+        renderGotifyPanel();
+        refreshStatusDisplays();
+        setToast(
+          state.gotify?.enabled
+            ? "Gotify-уведомления включены."
+            : "Gotify-уведомления выключены.",
+          "ok"
+        );
+      } catch (error) {
+        setToast(error.message || "Ошибка переключения Gotify", "error");
+      }
+    }
+
+    async function toggleWatcherMetric() {
+      const nextEnabled = !Boolean(state.watcher?.enabled);
+      const payload = {
+        enabled: nextEnabled,
+        debounce_seconds: normalizeWatcherDebounce(state.watcher?.debounce_seconds || 45),
+      };
+      try {
+        const response = await fetch("/api/watcher", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "watcher toggle failed");
+        state.watcher = result.watcher || payload;
+        state.watcherRuntime = result.runtime || state.watcherRuntime;
+        renderWatcherPanel();
+        refreshStatusDisplays();
+        setToast(
+          state.watcher?.enabled
+            ? "Наблюдатель включён."
+            : "Наблюдатель выключен.",
+          "ok"
+        );
+        refreshSnapshot().catch(() => {});
+      } catch (error) {
+        setToast(error.message || "Ошибка переключения наблюдателя", "error");
+      }
+    }
+
+    async function toggleAntiBotMetric() {
+      const nextEnabled = state.lastSnapshot?.antibot_enabled === false;
+      try {
+        const response = await fetch("/api/antibot", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: nextEnabled }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "antibot toggle failed");
+        state.lastSnapshot = {
+          ...(state.lastSnapshot || {}),
+          antibot_enabled: Boolean(payload.antibot_enabled),
+          next_copy_start_at: payload.next_copy_start_at || null,
+        };
+        refreshStatusDisplays();
+        setToast(
+          payload.antibot_enabled
+            ? "Антибот включён."
+            : "Антибот выключен.",
+          "ok"
+        );
+        refreshSnapshot().catch(() => {});
+      } catch (error) {
+        setToast(error.message || "Ошибка переключения антибота", "error");
+      }
+    }
+
+    async function toggleQueueMetric(queueKey) {
+      const definitions = queueDefinitions();
+      const item = definitions.find((entry) => entry.key === queueKey);
+      if (!item) {
+        setToast("Очередь не найдена", "error");
+        return;
+      }
+      const previousEnabled = item.enabled !== false;
+      item.enabled = !previousEnabled;
+      try {
+        const payload = buildQueueSettingsPayload({ useDom: false });
+        const response = await fetch("/api/queues", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "queue toggle failed");
+        state.queues = result.queues || payload;
+        renderQueuesPanel();
+        renderQueueOptions(formValue("jobProfile"));
+        refreshStatusDisplays();
+        setToast(
+          item.enabled === false
+            ? `Очередь ${queueKey} выключена.`
+            : `Очередь ${queueKey} включена.`,
+          "ok"
+        );
+        refreshSnapshot().catch(() => {});
+      } catch (error) {
+        item.enabled = previousEnabled;
+        renderQueuesPanel();
+        refreshStatusDisplays();
+        setToast(error.message || "Ошибка переключения очереди", "error");
+      }
     }
 
     function refreshAntiBotMetric() {
@@ -5447,17 +5940,24 @@
         if (!response.ok) throw new Error(result.detail || "save failed");
         state.gotify = result.gotify || payload;
         renderGotifyPanel();
+        refreshStatusDisplays();
         setToast("Настройки Gotify сохранены.", "ok");
       } catch (error) {
         setToast(error.message || "Ошибка сохранения Gotify", "error");
       }
     }
 
-    function buildQueueSettingsPayload() {
+    function buildQueueSettingsPayload({ useDom = true } = {}) {
       const payload = {
-        allow_parallel_profiles: isTogglePressed("queuesParallelProfiles"),
-        allow_scheduler_queueing: isTogglePressed("queuesSchedulerQueueing"),
-        allow_event_queueing: isTogglePressed("queuesEventQueueing"),
+        allow_parallel_profiles: useDom
+          ? isTogglePressed("queuesParallelProfiles")
+          : Boolean(state.queues?.allow_parallel_profiles),
+        allow_scheduler_queueing: useDom
+          ? isTogglePressed("queuesSchedulerQueueing")
+          : Boolean(state.queues?.allow_scheduler_queueing),
+        allow_event_queueing: useDom
+          ? isTogglePressed("queuesEventQueueing")
+          : Boolean(state.queues?.allow_event_queueing),
         definitions: queueDefinitions().map((item) => ({
           key: slugifyKey(item.key || item.title || "queue"),
           title: (item.title || item.key || "").trim() || null,
@@ -5499,6 +5999,7 @@
           renderQueuesPanel();
         }
         renderQueueOptions(formValue("jobProfile"));
+        refreshStatusDisplays();
         if (!silent) {
           setToast("Настройки очередей сохранены.", "ok");
         }
@@ -5568,6 +6069,7 @@
           normalizeAutoRcloneLogThreshold(state.logging?.auto_rclone_log_threshold || autoThreshold)
         );
         renderLoggingPanel();
+        refreshStatusDisplays();
         setToast(
           `Настройки логов сохранены: ручной лог ${state.logging?.rclone_log_enabled ? "включён" : "выключен"}, авто по ошибкам ${state.logging?.auto_rclone_log_enabled ? `включён, порог ${state.logging?.auto_rclone_log_threshold}` : "выключен"}.`,
           "ok"
@@ -5598,6 +6100,7 @@
         state.watcher = result.watcher || payload;
         state.watcherRuntime = result.runtime || state.watcherRuntime;
         renderWatcherPanel();
+        refreshStatusDisplays();
         if (!silent) {
           setToast(
             state.watcher?.enabled
@@ -6185,6 +6688,8 @@
         state.bandwidth = jobsPayload.bandwidth || state.bandwidth;
         state.logging = jobsPayload.logging || state.logging;
         state.watcher = jobsPayload.watcher || state.watcher;
+        renderStatus(state.lastSnapshot || snapshot);
+        updateServiceMessage(state.lastSnapshot || snapshot);
         applyLatestJobRuns(snapshot, { rerender: false });
         renderJobs();
         renderBandwidthControl();
@@ -6339,6 +6844,7 @@
     });
 
     document.querySelectorAll(".editor select, #globalBandwidthLimit, #loggingPanel select, #statsPanel select").forEach((select) => initCustomSelect(select));
+    bindStatusWidgetDrag();
     bindEditorCollapsibles();
     bindRunsHistoryTooltipLayer();
     refreshAll();

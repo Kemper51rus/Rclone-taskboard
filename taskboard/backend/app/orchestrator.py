@@ -38,6 +38,8 @@ AUTO_LOG_FAILURE_STREAK_STATE_PREFIX = "job_auto_rclone_log_failure_streak:"
 AUTO_LOG_SUCCESS_STREAK_STATE_PREFIX = "job_auto_rclone_log_success_streak:"
 RUN_HISTORY_RETENTION_DAYS = 365
 RUN_HISTORY_LAST_PRUNED_AT_STATE_KEY = "run_history_last_pruned_at"
+SCHEDULER_ENABLED_STATE_KEY = "scheduler_enabled"
+ANTIBOT_ENABLED_STATE_KEY = "antibot_enabled"
 
 
 class Orchestrator:
@@ -61,31 +63,39 @@ class Orchestrator:
         self._worker_threads: dict[str, list[threading.Thread]] = {}
         self._delayed_runs_by_queue: dict[str, set[int]] = {}
 
+        self._scheduler_lock = threading.RLock()
+        self._scheduler_stop_event = threading.Event()
+        self._scheduler_enabled = bool(settings.enable_scheduler)
         self._scheduler_thread: threading.Thread | None = None
+        self._antibot_enabled = True
         self._copy_start_gate_lock = threading.Lock()
         self._copy_starts_allowed_after: datetime | None = None
 
     def start(self) -> None:
-        if self._scheduler_thread and self._scheduler_thread.is_alive():
-            return
-
         self._stop_event.clear()
+        self._scheduler_stop_event.clear()
         self._maybe_prune_run_history()
-        self._copy_starts_allowed_after = datetime.now(timezone.utc) + timedelta(
-            seconds=self.settings.copy_startup_delay_seconds
+        stored_antibot_enabled = self.storage.get_state(ANTIBOT_ENABLED_STATE_KEY)
+        self._antibot_enabled = stored_antibot_enabled != "false"
+        self._copy_starts_allowed_after = (
+            datetime.now(timezone.utc) + timedelta(seconds=self.settings.copy_startup_delay_seconds)
+            if self._antibot_enabled
+            else None
         )
         self.sync_workers_from_catalog()
 
-        if self.settings.enable_scheduler:
-            self._scheduler_thread = threading.Thread(
-                target=self._scheduler_loop,
-                name="taskboard-scheduler",
-                daemon=True,
-            )
-            self._scheduler_thread.start()
+        stored_scheduler_enabled = self.storage.get_state(SCHEDULER_ENABLED_STATE_KEY)
+        self._scheduler_enabled = (
+            self.settings.enable_scheduler
+            if stored_scheduler_enabled is None
+            else stored_scheduler_enabled == "true"
+        )
+        if self._scheduler_enabled:
+            self._start_scheduler()
 
     def stop(self) -> None:
         self._stop_event.set()
+        self._scheduler_stop_event.set()
         with self._queue_lock:
             threads = [thread for items in self._worker_threads.values() for thread in items]
             for queue_name, workers in self._worker_threads.items():
@@ -98,6 +108,55 @@ class Orchestrator:
             thread.join(timeout=5)
         if self._scheduler_thread:
             self._scheduler_thread.join(timeout=5)
+
+    def _scheduler_alive(self) -> bool:
+        return bool(self._scheduler_thread and self._scheduler_thread.is_alive())
+
+    def _start_scheduler(self) -> None:
+        with self._scheduler_lock:
+            if self._stop_event.is_set() or self._scheduler_alive():
+                return
+            self._scheduler_stop_event.clear()
+            self._scheduler_thread = threading.Thread(
+                target=self._scheduler_loop,
+                name="taskboard-scheduler",
+                daemon=True,
+            )
+            self._scheduler_thread.start()
+
+    def set_scheduler_enabled(self, enabled: bool) -> dict[str, bool]:
+        enabled = bool(enabled)
+        with self._scheduler_lock:
+            self._scheduler_enabled = enabled
+            self.storage.set_state(SCHEDULER_ENABLED_STATE_KEY, "true" if enabled else "false")
+            if enabled:
+                self._start_scheduler()
+            else:
+                self._scheduler_stop_event.set()
+                thread = self._scheduler_thread
+        if not enabled and thread:
+            thread.join(timeout=5)
+        return self.scheduler_status()
+
+    def scheduler_status(self) -> dict[str, bool]:
+        return {
+            "scheduler_enabled": bool(self._scheduler_enabled),
+            "scheduler_alive": self._scheduler_alive(),
+        }
+
+    def set_antibot_enabled(self, enabled: bool) -> dict[str, Any]:
+        with self._copy_start_gate_lock:
+            self._antibot_enabled = bool(enabled)
+            if not self._antibot_enabled:
+                self._copy_starts_allowed_after = None
+            self.storage.set_state(ANTIBOT_ENABLED_STATE_KEY, "true" if enabled else "false")
+        return self.antibot_status()
+
+    def antibot_status(self) -> dict[str, Any]:
+        return {
+            "antibot_enabled": bool(self._antibot_enabled),
+            "next_copy_start_at": self._next_copy_start_at(),
+        }
 
     def sync_workers_from_catalog(self) -> None:
         desired = {
@@ -350,9 +409,7 @@ class Orchestrator:
             "heavy_queue_size": queue_status_by_key.get("heavy", {}).get("queued_runs", 0),
             "standard_worker_alive": queue_status_by_key.get("standard", {}).get("alive_workers", 0) > 0,
             "heavy_worker_alive": queue_status_by_key.get("heavy", {}).get("alive_workers", 0) > 0,
-            "scheduler_alive": bool(
-                self._scheduler_thread and self._scheduler_thread.is_alive()
-            ),
+            **self.scheduler_status(),
             "open_runs_total": self.storage.open_run_count(),
             "open_runs_standard": self.storage.open_run_count("standard"),
             "open_runs_heavy": self.storage.open_run_count("heavy"),
@@ -360,6 +417,7 @@ class Orchestrator:
             "last_heavy_day": self.storage.get_state("scheduler_last_heavy_day"),
             "last_event_enqueued_at": self.storage.get_state("event_last_enqueued_at"),
             "last_copy_started_at": self.storage.get_state(COPY_LAST_STARTED_AT_STATE_KEY),
+            "antibot_enabled": bool(self._antibot_enabled),
             "copy_starts_allowed_after": (
                 self._copy_starts_allowed_after.isoformat()
                 if self._copy_starts_allowed_after is not None
@@ -951,14 +1009,14 @@ class Orchestrator:
 
     def _scheduler_loop(self) -> None:
         timezone = ZoneInfo(self.settings.timezone)
-        while not self._stop_event.is_set():
+        while not self._stop_event.is_set() and not self._scheduler_stop_event.is_set():
             now_local = datetime.now(timezone)
             try:
                 self._maybe_prune_run_history()
                 self._maybe_schedule_jobs(now_local)
             except Exception:
                 logger.exception("scheduler tick failed")
-            self._stop_event.wait(5)
+            self._scheduler_stop_event.wait(5)
 
     def _maybe_schedule_jobs(self, now_local: datetime) -> None:
         jobs = self.catalog.raw_jobs()
@@ -1064,6 +1122,8 @@ class Orchestrator:
 
     def _reserve_copy_start_slot(self) -> float:
         with self._copy_start_gate_lock:
+            if not self._antibot_enabled:
+                return 0.0
             now = datetime.now(timezone.utc)
             next_allowed_at = self._next_copy_start_at_dt(now=now)
             if next_allowed_at is not None:
@@ -1078,6 +1138,8 @@ class Orchestrator:
         return next_allowed_at.isoformat() if next_allowed_at is not None else None
 
     def _next_copy_start_at_dt(self, now: datetime | None = None) -> datetime | None:
+        if not self._antibot_enabled:
+            return None
         current = now or datetime.now(timezone.utc)
         candidates: list[datetime] = []
         if self._copy_starts_allowed_after is not None:

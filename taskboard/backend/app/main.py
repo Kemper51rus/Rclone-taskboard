@@ -520,6 +520,14 @@ class LoggingPayload(BaseModel):
     auto_rclone_log_threshold: int = Field(default=3, ge=1, le=100)
 
 
+class SchedulerPayload(BaseModel):
+    enabled: bool = True
+
+
+class AntiBotPayload(BaseModel):
+    enabled: bool = True
+
+
 class CloudLockPayload(BaseModel):
     serialize_provider_lock: bool = False
 
@@ -1021,7 +1029,7 @@ def update_queue_settings(payload: QueueSettingsPayload) -> dict[str, Any]:
             for item in payload.definitions
         ],
     ).normalized()
-    queue_keys = set(queues.queue_keys())
+    queue_keys = {definition.key for definition in queues.definitions}
     for job in catalog.raw_jobs():
         if job.profile not in queue_keys:
             raise HTTPException(
@@ -1108,6 +1116,22 @@ def update_logging_settings(payload: LoggingPayload) -> dict[str, Any]:
             clouds=updated_catalog.raw_clouds(),
         )
     return {"saved": True, "logging": catalog.logging.to_dict()}
+
+
+@app.put("/api/scheduler", dependencies=[Depends(require_write_access)])
+def update_scheduler_settings(payload: SchedulerPayload) -> dict[str, Any]:
+    return {
+        "saved": True,
+        **orchestrator.set_scheduler_enabled(payload.enabled),
+    }
+
+
+@app.put("/api/antibot", dependencies=[Depends(require_write_access)])
+def update_antibot_settings(payload: AntiBotPayload) -> dict[str, Any]:
+    return {
+        "saved": True,
+        **orchestrator.set_antibot_enabled(payload.enabled),
+    }
 
 
 @app.put("/api/watcher", dependencies=[Depends(require_write_access)])
