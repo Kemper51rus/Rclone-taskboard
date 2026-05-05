@@ -159,9 +159,9 @@
       width: 100%;
     }
     .hero-actions .hero-bandwidth {
-      width: 128px;
-      min-width: 128px;
-      flex: 0 0 128px;
+      width: 122px;
+      min-width: 122px;
+      flex: 0 0 122px;
       order: 4;
     }
     .hero-actions .hero-bandwidth .select-shell,
@@ -173,13 +173,25 @@
       overflow-y: visible;
     }
     .hero-actions .hero-bandwidth .select-trigger {
+      height: 42px;
       min-height: 42px;
       border-radius: 999px;
-      padding: 9px 38px 9px 14px;
+      padding: 9px 34px 9px 12px;
       text-align: center;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      line-height: 22px;
+    }
+    .hero-actions .hero-bandwidth .select-trigger.select-no-limit {
+      font-size: 32px;
+      line-height: 22px;
+    }
+    .hero-actions .hero-bandwidth .select-option.select-no-limit {
+      font-size: 32px;
+      text-align: left;
+      padding-left: 32px;
+      padding-top: 5px;
     }
     .hero-actions > button {
       width: auto;
@@ -348,6 +360,12 @@
       background: rgba(10, 18, 28, 0.88);
       box-shadow: 0 0 0 3px rgba(124, 224, 255, 0.08), inset 0 0 0 1px rgba(124, 224, 255, 0.12);
     }
+    .select-trigger.select-no-limit,
+    .select-option.select-no-limit {
+      font-size: 22px;
+      line-height: 1;
+      font-weight: 700;
+    }
     .select-shell.is-open {
       z-index: 400;
     }
@@ -409,15 +427,17 @@
       width: 100%;
       display: block;
       min-width: 0;
-      min-height: 0;
+      height: 40px;
+      min-height: 40px;
       border: 0;
       border-radius: 12px;
       background: transparent;
       color: var(--text);
-      padding: 10px 12px;
+      padding: 9px 12px;
       text-align: left;
       cursor: pointer;
       box-sizing: border-box;
+      line-height: 22px;
       transition: background 160ms ease, color 160ms ease;
     }
     .select-option:hover,
@@ -2199,7 +2219,12 @@
                     <option value="year">Год</option>
                   </select>
                 </div>
-                <button class="secondary" type="button" onclick="refreshStatisticsSummary()">Обновить всё</button>
+                <div class="stats-period">
+                  <label for="statsJob">Задача</label>
+                  <select id="statsJob">
+                    <option value="">Все задачи</option>
+                  </select>
+                </div>
               </div>
             </div>
             <div class="logging-summary" id="statsSummary">Статистика ещё не загружалась.</div>
@@ -2422,7 +2447,7 @@
       queues: { allow_parallel_profiles: false, allow_scheduler_queueing: false, allow_event_queueing: false, definitions: [] },
       bandwidth: { limit: null },
       logging: { rclone_log_enabled: false, auto_rclone_log_enabled: false, auto_rclone_log_threshold: 3 },
-      stats: { period: "week", summary: null },
+      stats: { period: "week", job_key: "", summary: null },
       system: null,
       rcloneLogs: [],
       selectedRcloneLogStepId: null,
@@ -2486,8 +2511,9 @@
       "--log-level",
       "--dump",
     ]);
+    const noBandwidthLimitLabel = "∞";
     const bandwidthPresets = [
-      { value: "", label: "Без лимита" },
+      { value: "", label: noBandwidthLimitLabel },
       { value: "1250000B", label: "10 Мбит" },
       { value: "6250000B", label: "50 Мбит" },
       { value: "12500000B", label: "100 Мбит" },
@@ -3364,7 +3390,11 @@
       const rebuild = () => {
         const options = [...select.options];
         const selectedOption = options.find((option) => option.value === select.value) || options[0];
+        const selectedNoLimit = select.id === "globalBandwidthLimit" && selectedOption?.value === "";
         trigger.textContent = selectedOption?.textContent || "";
+        trigger.classList.toggle("select-no-limit", selectedNoLimit);
+        trigger.title = selectedNoLimit ? "Без ограничения скорости" : "";
+        trigger.setAttribute("aria-label", selectedNoLimit ? "Без ограничения скорости" : (selectedOption?.textContent || ""));
         optionsBox.innerHTML = "";
         const query = search ? search.value.trim().toLowerCase() : "";
         const visibleOptions = options.filter((option) => {
@@ -3382,6 +3412,11 @@
           const item = document.createElement("button");
           item.type = "button";
           item.className = "select-option";
+          if (select.id === "globalBandwidthLimit" && option.value === "") {
+            item.classList.add("select-no-limit");
+            item.title = "Без ограничения скорости";
+            item.setAttribute("aria-label", "Без ограничения скорости");
+          }
           if (option.value === select.value) item.classList.add("is-selected");
           item.disabled = option.disabled;
           item.textContent = option.textContent;
@@ -3588,7 +3623,7 @@
         const queueLimit = normalizeBandwidthLimit(item.bandwidth_limit);
         const queueLimitLabel = queueLimit
           ? formatBandwidthLimitLabel(queueLimit)
-          : formatBandwidthLimitLabel(state.bandwidth?.limit, "Без лимита");
+          : formatBandwidthLimitLabel(state.bandwidth?.limit, noBandwidthLimitLabel);
         return `
         <article class="job-card cloud-card clickable ${item.enabled === false ? "disabled" : ""} ${index === activeIndex ? "selected" : ""}" onclick="selectQueueDefinition(${index})">
           <div class="job-top">
@@ -3760,6 +3795,29 @@
       `).join("");
     }
 
+    function populateStatsJobFilter() {
+      const select = document.getElementById("statsJob");
+      if (!select) return;
+      const selected = state.stats?.job_key || "";
+      const jobs = Array.isArray(state.jobs)
+        ? state.jobs
+            .filter((job) => job?.kind === "backup" && job?.key)
+            .sort((a, b) => String(a.display_title || a.title || a.key).localeCompare(String(b.display_title || b.title || b.key)))
+        : [];
+      select.innerHTML = [
+        '<option value="">Все задачи</option>',
+        ...jobs.map((job) => {
+          const title = job.display_title || job.title || job.description || job.key;
+          return `<option value="${escapeHtml(job.key)}">${escapeHtml(title)}</option>`;
+        }),
+      ].join("");
+      select.value = jobs.some((job) => job.key === selected) ? selected : "";
+      if (selected && select.value !== selected) {
+        state.stats = { ...state.stats, job_key: "" };
+      }
+      refreshCustomSelect(select);
+    }
+
     function renderSystemStatsPanel(system = null) {
       const grid = document.getElementById("systemStatsGrid");
       const note = document.getElementById("databaseMaintenanceNote");
@@ -3825,6 +3883,7 @@
       toggle.classList.toggle("is-active", state.showStats);
       select.value = state.stats?.period || "week";
       refreshCustomSelect(select);
+      populateStatsJobFilter();
 
       const summary = state.stats?.summary || null;
       if (!summary) {
@@ -3840,7 +3899,8 @@
       const runs = summary.runs || {};
       const transfer = summary.transfer || {};
       const unsuccessful = Number(runs.unsuccessful || 0);
-      summaryNode.textContent = `${summary.period_label || "Период"} • запусков ${formatInteger(runs.total || 0)}.`;
+      const jobLabel = summary.job_title || summary.job_key || "";
+      summaryNode.textContent = `${summary.period_label || "Период"}${jobLabel ? ` • ${jobLabel}` : ""} • запусков ${formatInteger(runs.total || 0)}.`;
       grid.innerHTML = statsCardMarkup([
         { label: "Удачные", value: formatInteger(runs.succeeded || 0), note: "запуски без ошибок" },
         { label: "Неудачные", value: formatInteger(unsuccessful), note: "ошибки и остановки" },
@@ -3868,6 +3928,25 @@
       retentionNode.textContent = `Автоочистка истории и step-логов старше ${formatInteger(summary.retention?.history_days || 365)} дней включена. Последняя очистка: ${lastPruned}.`;
       renderSystemStatsPanel(summary.system || state.system);
       updateRunsLayout();
+    }
+
+    function statsFilterValues() {
+      return {
+        period: String(document.getElementById("statsPeriod")?.value || state.stats?.period || "week"),
+        job_key: String(document.getElementById("statsJob")?.value || state.stats?.job_key || ""),
+      };
+    }
+
+    function handleStatsFilterChange() {
+      const filters = statsFilterValues();
+      state.stats = {
+        ...state.stats,
+        period: filters.period,
+        job_key: filters.job_key,
+        summary: null,
+      };
+      renderStatsPanel();
+      refreshStatisticsSummary({ silent: true }).catch((error) => setToast(error.message || "Ошибка загрузки статистики", "error"));
     }
 
     function renderLoggingPanel() {
@@ -3905,12 +3984,15 @@
 
     async function refreshStatisticsSummary({ silent = false } = {}) {
       try {
-        const period = String(document.getElementById("statsPeriod")?.value || state.stats?.period || "week");
-        const response = await fetch(`/api/stats/summary?period=${encodeURIComponent(period)}`);
+        const { period, job_key: jobKey } = statsFilterValues();
+        const query = new URLSearchParams({ period });
+        if (jobKey) query.set("job_key", jobKey);
+        const response = await fetch(`/api/stats/summary?${query.toString()}`);
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || "statistics failed");
         state.stats = {
           period: payload.period || period,
+          job_key: payload.job_key || jobKey,
           summary: payload,
         };
         renderStatsPanel();
@@ -4823,7 +4905,7 @@
       return normalized;
     }
 
-    function formatBandwidthLimitLabel(value, fallbackLabel = "Без лимита") {
+    function formatBandwidthLimitLabel(value, fallbackLabel = noBandwidthLimitLabel) {
       const normalized = normalizeBandwidthLimit(value);
       if (!normalized) return fallbackLabel;
       const preset = [...queueBandwidthPresets, ...bandwidthPresets].find((item) => item.value === normalized);
@@ -6755,11 +6837,10 @@
       document.getElementById(id).addEventListener("change", () => renderLoggingPanel());
     });
     document.getElementById("statsPeriod").addEventListener("change", (event) => {
-      state.stats = {
-        ...state.stats,
-        period: String(event.target.value || "week"),
-      };
-      refreshStatisticsSummary({ silent: true }).catch((error) => setToast(error.message || "Ошибка загрузки статистики", "error"));
+      handleStatsFilterChange();
+    });
+    document.getElementById("statsJob").addEventListener("change", (event) => {
+      handleStatsFilterChange();
     });
     document.addEventListener("click", (event) => {
       if (!event.target.closest(".select-shell")) {

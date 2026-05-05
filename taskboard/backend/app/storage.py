@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS run_steps (
 
 CREATE INDEX IF NOT EXISTS idx_run_steps_run_id ON run_steps(run_id);
 CREATE INDEX IF NOT EXISTS idx_run_steps_status ON run_steps(status);
+CREATE INDEX IF NOT EXISTS idx_run_steps_job_key ON run_steps(job_key);
 
 CREATE TABLE IF NOT EXISTS kv_state (
     key TEXT PRIMARY KEY,
@@ -767,18 +768,35 @@ class Storage:
             items.append(payload)
         return items
 
-    def stats_run_counts_since(self, started_at: str) -> dict[str, int]:
+    def stats_run_counts_since(self, started_at: str, job_key: str | None = None) -> dict[str, int]:
+        filters = [
+            "status NOT IN ('queued', 'running')",
+            "COALESCE(finished_at, started_at, requested_at) >= ?",
+        ]
+        params: list[Any] = [started_at]
+        if job_key:
+            filters.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM run_steps rs
+                    WHERE rs.run_id = runs.id
+                      AND rs.step_kind = 'job'
+                      AND rs.job_key = ?
+                )
+                """
+            )
+            params.append(job_key)
         with self._lock:
             with self._connect() as conn:
                 rows = conn.execute(
-                    """
+                    f"""
                     SELECT status, COUNT(*) AS count
                     FROM runs
-                    WHERE status NOT IN ('queued', 'running')
-                      AND COALESCE(finished_at, started_at, requested_at) >= ?
+                    WHERE {" AND ".join(filters)}
                     GROUP BY status
                     """,
-                    (started_at,),
+                    tuple(params),
                 ).fetchall()
         counts = {
             "succeeded": 0,
@@ -793,11 +811,20 @@ class Storage:
         counts["total"] = counts["succeeded"] + counts["failed"] + counts["stopped"]
         return counts
 
-    def list_statistics_steps(self, started_at: str) -> list[dict[str, Any]]:
+    def list_statistics_steps(self, started_at: str, job_key: str | None = None) -> list[dict[str, Any]]:
+        filters = [
+            "r.status NOT IN ('queued', 'running')",
+            "rs.step_kind = 'job'",
+            "COALESCE(r.finished_at, r.started_at, r.requested_at) >= ?",
+        ]
+        params: list[Any] = [started_at]
+        if job_key:
+            filters.append("rs.job_key = ?")
+            params.append(job_key)
         with self._lock:
             with self._connect() as conn:
                 rows = conn.execute(
-                    """
+                    f"""
                     SELECT
                         rs.id,
                         rs.run_id,
@@ -807,6 +834,8 @@ class Storage:
                         rs.command_json,
                         rs.duration_seconds,
                         rs.progress_json,
+                        rs.stdout_tail,
+                        rs.stderr_tail,
                         rs.log_mode,
                         rs.started_at,
                         rs.finished_at,
@@ -817,12 +846,10 @@ class Storage:
                         COALESCE(r.finished_at, r.started_at, r.requested_at) AS occurred_at
                     FROM run_steps rs
                     JOIN runs r ON r.id = rs.run_id
-                    WHERE r.status NOT IN ('queued', 'running')
-                      AND rs.step_kind = 'job'
-                      AND COALESCE(r.finished_at, r.started_at, r.requested_at) >= ?
+                    WHERE {" AND ".join(filters)}
                     ORDER BY occurred_at DESC, rs.id DESC
                     """,
-                    (started_at,),
+                    tuple(params),
                 ).fetchall()
         items: list[dict[str, Any]] = []
         for row in rows:

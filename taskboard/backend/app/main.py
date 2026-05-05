@@ -278,12 +278,14 @@ def _statistics_period_bounds(period: str) -> tuple[str, datetime]:
     return label, started_at
 
 
-def _statistics_summary(period: str) -> dict[str, Any]:
+def _statistics_summary(period: str, job_key: str | None = None) -> dict[str, Any]:
     period_key = str(period or "week").strip().lower()
     period_label, started_at = _statistics_period_bounds(period_key)
     started_at_iso = started_at.isoformat()
-    runs = storage.stats_run_counts_since(started_at_iso)
-    steps = storage.list_statistics_steps(started_at_iso)
+    normalized_job_key = str(job_key or "").strip()
+    selected_job = catalog.get_job(normalized_job_key) if normalized_job_key else None
+    runs = storage.stats_run_counts_since(started_at_iso, normalized_job_key or None)
+    steps = storage.list_statistics_steps(started_at_iso, normalized_job_key or None)
     traffic_bytes = 0
     files_total = 0
     transfer_duration_seconds = 0.0
@@ -302,6 +304,11 @@ def _statistics_summary(period: str) -> dict[str, Any]:
         if any(value is None for value in (transferred_bytes, total_bytes, file_count, file_total)):
             parsed = extract_transfer_metrics(
                 progress=step.get("progress"),
+                output_text="\n".join(
+                    item
+                    for item in (step.get("stdout_tail"), step.get("stderr_tail"))
+                    if item
+                ),
                 log_path=(
                     _step_rclone_log_path(run_id=int(step["run_id"]), step_id=int(step["id"]))
                     if step.get("log_mode")
@@ -342,6 +349,12 @@ def _statistics_summary(period: str) -> dict[str, Any]:
     return {
         "period": period_key if period_key in STATS_PERIODS else "week",
         "period_label": period_label,
+        "job_key": normalized_job_key or None,
+        "job_title": (
+            selected_job.title or selected_job.description or selected_job.key
+            if selected_job
+            else None
+        ),
         "started_at": started_at_iso,
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "runs": runs,
@@ -726,8 +739,11 @@ def state() -> dict[str, Any]:
 
 
 @app.get("/api/stats/summary")
-def stats_summary(period: str = Query(default="week")) -> dict[str, Any]:
-    return _statistics_summary(period)
+def stats_summary(
+    period: str = Query(default="week"),
+    job_key: str | None = Query(default=None),
+) -> dict[str, Any]:
+    return _statistics_summary(period, job_key)
 
 
 @app.get("/api/system")

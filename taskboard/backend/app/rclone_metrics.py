@@ -139,9 +139,22 @@ def read_latest_log_progress(
     return latest
 
 
+def read_latest_output_progress(output_text: str | None) -> dict[str, Any]:
+    lines = str(output_text or "").splitlines()[-300:]
+    latest: dict[str, Any] = {}
+    for line in lines:
+        parsed = parse_rclone_log_progress_line(line)
+        if not parsed:
+            continue
+        parsed.pop("line_time", None)
+        latest = enrich_progress(parsed)
+    return latest
+
+
 def extract_transfer_metrics(
     *,
     progress: dict[str, Any] | None,
+    output_text: str | None = None,
     log_path: Path | None = None,
     started_at_raw: str | None = None,
     timezone_name: str = "UTC",
@@ -151,6 +164,16 @@ def extract_transfer_metrics(
         merged.get(key) is None
         for key in ("transferred", "total", "file_count", "file_total")
     )
+    if needs_log and output_text:
+        output_progress = read_latest_output_progress(output_text)
+        for key in ("transferred", "total", "file_count", "file_total", "raw_line"):
+            if merged.get(key) in (None, "") and output_progress.get(key) not in (None, ""):
+                merged[key] = output_progress.get(key)
+        needs_log = any(
+            merged.get(key) is None
+            for key in ("transferred", "total", "file_count", "file_total")
+        )
+
     if needs_log and log_path is not None:
         log_progress = read_latest_log_progress(
             started_at_raw=started_at_raw,

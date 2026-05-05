@@ -588,7 +588,12 @@ class Orchestrator:
                 exit_code=result.exit_code,
                 stdout_tail=result.stdout_tail,
                 stderr_tail=result.stderr_tail,
-                **self._step_transfer_metrics(step_id=step_id, run_id=run_id),
+                **self._step_transfer_metrics(
+                    step_id=step_id,
+                    run_id=run_id,
+                    stdout_tail=result.stdout_tail,
+                    stderr_tail=result.stderr_tail,
+                ),
             )
             self._update_job_auto_rclone_log_state(step=step, status=result.status)
             self._notify_for_step(run=run, step=step, result=result)
@@ -789,7 +794,14 @@ class Orchestrator:
         parsed = parse_data_size_to_bytes(normalized)
         return float(parsed) if parsed is not None else None
 
-    def _step_transfer_metrics(self, *, step_id: int, run_id: int) -> dict[str, int | None]:
+    def _step_transfer_metrics(
+        self,
+        *,
+        step_id: int,
+        run_id: int,
+        stdout_tail: str | None = None,
+        stderr_tail: str | None = None,
+    ) -> dict[str, int | None]:
         step = self.storage.get_run_step(step_id)
         if not step:
             return {
@@ -808,6 +820,7 @@ class Orchestrator:
             }
         return extract_transfer_metrics(
             progress=step.get("progress"),
+            output_text="\n".join(item for item in (stdout_tail, stderr_tail) if item),
             log_path=(
                 self._step_rclone_log_path(run_id=run_id, step_id=step_id)
                 if step.get("log_mode")
