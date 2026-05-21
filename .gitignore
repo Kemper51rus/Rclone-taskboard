@@ -1,6 +1,8 @@
 # Secrets and local environment
 .codex
 taskboard/.env
+taskboard/.env.frontend
+taskboard/.env.frontend-next
 taskboard/backend/app/jobs/default_jobs.json
 Security.md
 docs/Security.md

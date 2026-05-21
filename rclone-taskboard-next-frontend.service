@@ -1,0 +1,21 @@
+[Unit]
+Description=Rclone taskboard next frontend
+After=network-online.target rclone-taskboard.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/rclone-taskboard/taskboard/frontend
+Environment=TASKBOARD_FRONTEND_HOST=0.0.0.0
+Environment=TASKBOARD_FRONTEND_PORT=8090
+Environment=TASKBOARD_FRONTEND_API_PROXY_URL=http://127.0.0.1:8081
+Environment=TASKBOARD_FRONTEND_STATIC_ROOT=/opt/rclone-taskboard/taskboard/frontend-next/static
+EnvironmentFile=-/opt/rclone-taskboard/taskboard/.env.frontend-next
+ExecStart=/opt/rclone-taskboard/taskboard/.venv/bin/python3 -m taskboard_frontend.server
+Restart=always
+RestartSec=3
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target

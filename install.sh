@@ -9,7 +9,9 @@ SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 SERVICE_NAME="${SERVICE_NAME:-rclone-taskboard.service}"
 FRONTEND_SERVICE_NAME="${FRONTEND_SERVICE_NAME:-${SERVICE_NAME%.service}-frontend.service}"
+NEXT_FRONTEND_SERVICE_NAME="${NEXT_FRONTEND_SERVICE_NAME:-${SERVICE_NAME%.service}-next-frontend.service}"
 TASKBOARD_PUBLIC_PORT="${TASKBOARD_PUBLIC_PORT:-8080}"
+TASKBOARD_NEXT_FRONTEND_PORT="${TASKBOARD_NEXT_FRONTEND_PORT:-8090}"
 TASKBOARD_BACKEND_PORT="${TASKBOARD_BACKEND_PORT:-8081}"
 SOURCE_CHECKOUT_DEFAULT="${SOURCE_CHECKOUT_DEFAULT:-/opt/rclone-taskboard-src}"
 RCLONE_WEB_SERVICE_NAME="${RCLONE_WEB_SERVICE_NAME:-rclone-web.service}"
@@ -127,14 +129,17 @@ first_local_ipv4() {
 print_access_summary() {
   local mode="$1"
   local dashboard_port="$TASKBOARD_PUBLIC_PORT"
+  local next_frontend_port="$TASKBOARD_NEXT_FRONTEND_PORT"
   local backend_port="$TASKBOARD_BACKEND_PORT"
-  local primary_ip dashboard_url rclone_url rclone_web_port
+  local primary_ip dashboard_url next_frontend_url rclone_url rclone_web_port
 
   primary_ip="$(first_local_ipv4)"
   if [[ -n "$primary_ip" ]]; then
     dashboard_url="http://${primary_ip}:${dashboard_port}/"
+    next_frontend_url="http://${primary_ip}:${next_frontend_port}/"
   else
     dashboard_url="http://<local-ip>:${dashboard_port}/"
+    next_frontend_url="http://<local-ip>:${next_frontend_port}/"
   fi
 
   log ""
@@ -144,7 +149,9 @@ print_access_summary() {
   printf '%b\n' "${C_CYAN}Runtime:${C_RESET} $TARGET_ROOT"
   printf '%b\n' "${C_CYAN}Backend service:${C_RESET} $SERVICE_NAME"
   printf '%b\n' "${C_CYAN}Frontend service:${C_RESET} $FRONTEND_SERVICE_NAME"
+  printf '%b\n' "${C_CYAN}Next frontend service:${C_RESET} $NEXT_FRONTEND_SERVICE_NAME"
   printf '%b\n' "${C_CYAN}Taskboard LAN:${C_RESET} $dashboard_url"
+  printf '%b\n' "${C_CYAN}Taskboard Next LAN:${C_RESET} $next_frontend_url"
   printf '%b\n' "${C_CYAN}Backend API:${C_RESET} http://127.0.0.1:${backend_port}/api/health"
 
   if has_working_systemd && systemctl list-unit-files "$SERVICE_NAME" --no-legend >/dev/null 2>&1; then
@@ -159,6 +166,13 @@ print_access_summary() {
       printf '%b\n' "${C_GREEN}Frontend service active: yes${C_RESET}"
     else
       printf '%b\n' "${C_YELLOW}Frontend service active: no${C_RESET}"
+    fi
+  fi
+  if has_working_systemd && systemctl list-unit-files "$NEXT_FRONTEND_SERVICE_NAME" --no-legend >/dev/null 2>&1; then
+    if systemctl is-active --quiet "$NEXT_FRONTEND_SERVICE_NAME"; then
+      printf '%b\n' "${C_GREEN}Next frontend service active: yes${C_RESET}"
+    else
+      printf '%b\n' "${C_YELLOW}Next frontend service active: no${C_RESET}"
     fi
   fi
 
@@ -574,6 +588,7 @@ prepare_source_checkout() {
 
   [[ -f "$SOURCE_ROOT/taskboard/backend/app/main.py" ]] || die "В $SOURCE_ROOT не найден taskboard/backend/app/main.py"
   [[ -f "$SOURCE_ROOT/taskboard/frontend/static/dashboard.html" ]] || die "В $SOURCE_ROOT не найден taskboard/frontend/static/dashboard.html"
+  [[ -f "$SOURCE_ROOT/taskboard/frontend-next/static/dashboard.html" ]] || die "В $SOURCE_ROOT не найден taskboard/frontend-next/static/dashboard.html"
 }
 
 copy_runtime_bundle() {
@@ -593,15 +608,18 @@ copy_runtime_bundle() {
     "$target_root/taskboard/backend" \
     "$target_root/taskboard/backend/app" \
     "$target_root/taskboard/frontend" \
+    "$target_root/taskboard/frontend-next" \
     "$target_root/taskboard/data"
 
   cp -a "$source_root/taskboard/backend/app/." "$target_root/taskboard/backend/app/"
   cp -a "$source_root/taskboard/frontend/." "$target_root/taskboard/frontend/"
+  cp -a "$source_root/taskboard/frontend-next/." "$target_root/taskboard/frontend-next/"
   rm -f \
     "$target_root/taskboard/backend/app/dashboard.html" \
     "$target_root/taskboard/backend/app/rclone-taskboard-logo.svg"
   find "$target_root/taskboard/backend/app" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -exec rm -rf {} +
   find "$target_root/taskboard/frontend" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -exec rm -rf {} +
+  find "$target_root/taskboard/frontend-next" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -exec rm -rf {} +
   if [[ -n "$preserved_jobs_file" ]]; then
     install -m 0644 "$preserved_jobs_file" "$target_jobs_file"
     rm -f "$preserved_jobs_file"
@@ -633,6 +651,9 @@ copy_runtime_bundle() {
   fi
   if [[ -f "$source_root/taskboard/.env.frontend.example" ]]; then
     install -m 0644 "$source_root/taskboard/.env.frontend.example" "$target_root/taskboard/.env.frontend.example"
+  fi
+  if [[ -f "$source_root/taskboard/.env.frontend-next.example" ]]; then
+    install -m 0644 "$source_root/taskboard/.env.frontend-next.example" "$target_root/taskboard/.env.frontend-next.example"
   fi
 
 }
@@ -685,8 +706,15 @@ install_systemd_unit() {
     -e "s|http://127.0.0.1:8081|$backend_proxy_url|g" \
     -e "s|TASKBOARD_FRONTEND_PORT=8080|TASKBOARD_FRONTEND_PORT=${TASKBOARD_PUBLIC_PORT}|g" \
     "$source_root/rclone-taskboard-frontend.service" > "$target_root/rclone-taskboard-frontend.service"
+  sed \
+    -e "s|/opt/rclone-taskboard|$escaped_target|g" \
+    -e "s|rclone-taskboard.service|$SERVICE_NAME|g" \
+    -e "s|http://127.0.0.1:8081|$backend_proxy_url|g" \
+    -e "s|TASKBOARD_FRONTEND_PORT=8090|TASKBOARD_FRONTEND_PORT=${TASKBOARD_NEXT_FRONTEND_PORT}|g" \
+    "$source_root/rclone-taskboard-next-frontend.service" > "$target_root/rclone-taskboard-next-frontend.service"
   install -m 0644 "$target_root/rclone-taskboard.service" "$SYSTEMD_DIR/$SERVICE_NAME"
   install -m 0644 "$target_root/rclone-taskboard-frontend.service" "$SYSTEMD_DIR/$FRONTEND_SERVICE_NAME"
+  install -m 0644 "$target_root/rclone-taskboard-next-frontend.service" "$SYSTEMD_DIR/$NEXT_FRONTEND_SERVICE_NAME"
   systemctl daemon-reload
 }
 
@@ -794,6 +822,9 @@ install_or_update_systemd() {
   if [[ ! -f "$TARGET_ROOT/taskboard/.env.frontend" ]]; then
     install -m 0644 "$SOURCE_ROOT/taskboard/.env.frontend.example" "$TARGET_ROOT/taskboard/.env.frontend"
   fi
+  if [[ ! -f "$TARGET_ROOT/taskboard/.env.frontend-next" && -f "$SOURCE_ROOT/taskboard/.env.frontend-next.example" ]]; then
+    install -m 0644 "$SOURCE_ROOT/taskboard/.env.frontend-next.example" "$TARGET_ROOT/taskboard/.env.frontend-next"
+  fi
 
   "$PYTHON_BIN" -m venv "$TARGET_ROOT/taskboard/.venv"
   "$TARGET_ROOT/taskboard/.venv/bin/pip" install --upgrade pip
@@ -805,8 +836,10 @@ install_or_update_systemd() {
   install_rclone_web_service
   systemctl enable "$SERVICE_NAME"
   systemctl enable "$FRONTEND_SERVICE_NAME"
+  systemctl enable "$NEXT_FRONTEND_SERVICE_NAME"
   systemctl restart "$SERVICE_NAME"
   systemctl restart "$FRONTEND_SERVICE_NAME"
+  systemctl restart "$NEXT_FRONTEND_SERVICE_NAME"
 
   log "Systemd установка/обновление завершены."
   print_access_summary "systemd"
@@ -901,8 +934,10 @@ uninstall_taskboard() {
     if has_working_systemd; then
       systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true
       systemctl disable --now "$FRONTEND_SERVICE_NAME" 2>/dev/null || true
+      systemctl disable --now "$NEXT_FRONTEND_SERVICE_NAME" 2>/dev/null || true
       rm -f "$SYSTEMD_DIR/$SERVICE_NAME"
       rm -f "$SYSTEMD_DIR/$FRONTEND_SERVICE_NAME"
+      rm -f "$SYSTEMD_DIR/$NEXT_FRONTEND_SERVICE_NAME"
       if [[ -f "$RCLONE_WEB_INSTALLED_MARKER" ]]; then
         systemctl disable --now "$RCLONE_WEB_SERVICE_NAME" 2>/dev/null || true
         rm -f "$SYSTEMD_DIR/$RCLONE_WEB_SERVICE_NAME"
@@ -913,11 +948,13 @@ uninstall_taskboard() {
       systemctl daemon-reload || true
       systemctl reset-failed "$SERVICE_NAME" 2>/dev/null || true
       systemctl reset-failed "$FRONTEND_SERVICE_NAME" 2>/dev/null || true
+      systemctl reset-failed "$NEXT_FRONTEND_SERVICE_NAME" 2>/dev/null || true
       [[ -f "$RCLONE_WEB_INSTALLED_MARKER" ]] && systemctl reset-failed "$RCLONE_WEB_SERVICE_NAME" 2>/dev/null || true
     else
       log_warn "systemd недоступен: service не может быть остановлен через systemctl, будет только удалён unit-файл."
       rm -f "$SYSTEMD_DIR/$SERVICE_NAME"
       rm -f "$SYSTEMD_DIR/$FRONTEND_SERVICE_NAME"
+      rm -f "$SYSTEMD_DIR/$NEXT_FRONTEND_SERVICE_NAME"
       if [[ -f "$RCLONE_WEB_INSTALLED_MARKER" ]]; then
         rm -f "$SYSTEMD_DIR/$RCLONE_WEB_SERVICE_NAME" "$RCLONE_WEB_INSTALLED_MARKER"
       else
@@ -1013,6 +1050,12 @@ print_status() {
     else
       log "  frontend unit: $FRONTEND_SERVICE_NAME ${C_RED}не найден${C_RESET}"
     fi
+    if systemctl list-unit-files "$NEXT_FRONTEND_SERVICE_NAME" --no-legend >/dev/null 2>&1; then
+      log "  next frontend unit: $NEXT_FRONTEND_SERVICE_NAME ${C_GREEN}найден${C_RESET}"
+      systemctl is-active --quiet "$NEXT_FRONTEND_SERVICE_NAME" && log "  next frontend active: yes" || log_warn "next frontend active: no"
+    else
+      log "  next frontend unit: $NEXT_FRONTEND_SERVICE_NAME ${C_RED}не найден${C_RESET}"
+    fi
     if systemctl list-unit-files "$RCLONE_WEB_SERVICE_NAME" --no-legend >/dev/null 2>&1; then
       log "  rclone web unit: $RCLONE_WEB_SERVICE_NAME ${C_GREEN}найден${C_RESET}"
       systemctl is-active --quiet "$RCLONE_WEB_SERVICE_NAME" && log "  rclone web active: yes" || log_warn "rclone web active: no"
@@ -1090,7 +1133,9 @@ Environment:
   DEFAULT_GIT_REF=$DEFAULT_GIT_REF
   SERVICE_NAME=$SERVICE_NAME
   FRONTEND_SERVICE_NAME=$FRONTEND_SERVICE_NAME
+  NEXT_FRONTEND_SERVICE_NAME=$NEXT_FRONTEND_SERVICE_NAME
   TASKBOARD_PUBLIC_PORT=$TASKBOARD_PUBLIC_PORT
+  TASKBOARD_NEXT_FRONTEND_PORT=$TASKBOARD_NEXT_FRONTEND_PORT
   TASKBOARD_BACKEND_PORT=$TASKBOARD_BACKEND_PORT
   JOBS_TEMPLATE_MODE=${JOBS_TEMPLATE_MODE:-examples|empty}
   RCLONE_WEB_SERVICE_NAME=$RCLONE_WEB_SERVICE_NAME

@@ -12,8 +12,10 @@
 
 - `rclone-taskboard.service` — backend/API runtime, по умолчанию слушает `127.0.0.1:8081`
 - `rclone-taskboard-frontend.service` — статический frontend, по умолчанию слушает `0.0.0.0:8080` и проксирует `/api` в backend
+- `rclone-taskboard-next-frontend.service` — экспериментальный новый frontend, по умолчанию слушает `0.0.0.0:8090` и проксирует `/api` в тот же backend
 
 Так frontend можно обновлять, перезапускать или переносить в другой LXC без рестарта backend. Для внешнего frontend укажите `TASKBOARD_FRONTEND_API_PROXY_URL=http://<backend-host>:8081` в `.env.frontend`; на backend-LXC в этом случае задайте `TASKBOARD_BACKEND_HOST=0.0.0.0` или откройте API через свой reverse-proxy. Если браузер должен обращаться к backend напрямую, настройте `TASKBOARD_CORS_ORIGINS` в backend `.env`.
+Экспериментальный frontend не заменяет текущий: для отката достаточно остановить `rclone-taskboard-next-frontend.service`, старый интерфейс на `8080` продолжит работать.
 
 ## Единый installer
 
@@ -116,6 +118,8 @@ sudo ./install.sh migrate-legacy
 
 - `GET http://<host>:8080/frontend-health`
 - `GET http://<host>:8080/api/health` через frontend proxy
+- `GET http://<host>:8090/frontend-health` для экспериментального frontend
+- `GET http://<host>:8090/api/health` через proxy экспериментального frontend
 - `GET http://127.0.0.1:8081/api/health` напрямую в backend
 - `GET /api/state`
 - `GET /api/system`

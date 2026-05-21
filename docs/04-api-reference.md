@@ -250,6 +250,7 @@ Cloud settings читаются из `rclone.conf`, но приложение с
 - browse облака: `GET /api/clouds/browse`
 
 При split-deployment штатный frontend слушает публичный порт и проксирует `/api/*` к backend.
+Экспериментальный frontend из `taskboard/frontend-next/static` использует тот же контракт и может жить отдельным сервисом или отдельным LXC без изменений backend.
 Если frontend живёт на другом LXC, укажите в его `.env.frontend`:
 
 ```env
