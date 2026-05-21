@@ -2182,6 +2182,475 @@
       letter-spacing: 0.14em;
       text-transform: uppercase;
     }
+    .next-sidebar-live {
+      margin-top: 20px;
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(54, 197, 240, 0.18);
+      background: rgba(16, 27, 45, 0.54);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 16px 48px rgba(0,0,0,0.18);
+    }
+    .next-live-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #8ca0b8;
+      font-size: 12px;
+    }
+    .next-live-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: #38e86b;
+      box-shadow: 0 0 18px rgba(56,232,107,0.62);
+      animation: nextLiveDot 1.6s var(--ease-smooth) infinite;
+      flex: 0 0 auto;
+    }
+    .next-mini-wave {
+      width: 100%;
+      height: 34px;
+      margin-top: 10px;
+      color: #2f80ed;
+      filter: drop-shadow(0 0 8px rgba(47,128,237,0.36));
+    }
+    .next-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      min-height: 70px;
+      margin: -8px 0 18px;
+      padding: 14px 20px;
+      border: 1px solid rgba(54, 197, 240, 0.14);
+      border-radius: 22px;
+      background: rgba(5, 11, 24, 0.58);
+      backdrop-filter: blur(22px);
+      box-shadow: 0 18px 58px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .next-title {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+    .next-title-mark {
+      width: 46px;
+      height: 46px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      color: #36c5f0;
+      background: rgba(47,128,237,0.16);
+      border: 1px solid rgba(54,197,240,0.16);
+      box-shadow: 0 0 32px rgba(47,128,237,0.24), inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+    .next-title h1 {
+      margin: 0 0 4px;
+      font-size: clamp(23px, 2vw, 32px);
+      line-height: 1;
+    }
+    .next-title p {
+      margin: 0;
+      color: #8ca0b8;
+      font-size: 14px;
+    }
+    .next-topbar-side {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .next-clock {
+      min-width: 150px;
+      text-align: right;
+      color: #d8e6f3;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+    .next-clock small {
+      display: block;
+      color: #8ca0b8;
+      font-size: 12px;
+    }
+    .next-system-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 46px;
+      padding: 0 16px;
+      border-radius: 15px;
+      border: 1px solid rgba(54, 197, 240, 0.14);
+      background: rgba(16, 27, 45, 0.62);
+      color: #d8e6f3;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+      white-space: nowrap;
+    }
+    .next-dashboard-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.58fr) minmax(330px, 0.82fr);
+      gap: 18px;
+      align-items: start;
+      margin-bottom: 18px;
+    }
+    .next-dashboard-rail {
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+    .next-chart-card {
+      padding: 18px;
+      margin: 0;
+      overflow: hidden;
+    }
+    .next-chart-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .next-chart-title {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+    .next-chart-value {
+      margin: 0;
+      color: #36c5f0;
+      font-size: 26px;
+      font-weight: 800;
+      line-height: 1;
+      text-shadow: 0 0 20px rgba(54,197,240,0.18);
+    }
+    .next-chart-select {
+      padding: 8px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(54,197,240,0.14);
+      background: rgba(16,27,45,0.72);
+      color: #8ca0b8;
+      font-size: 12px;
+    }
+    .next-speed-chart {
+      width: 100%;
+      height: 88px;
+      overflow: visible;
+    }
+    .next-speed-area {
+      fill: url(#nextSpeedFill);
+      opacity: 0.42;
+      transition: opacity var(--motion-standard) var(--ease-smooth);
+    }
+    .next-speed-line {
+      fill: none;
+      stroke: #2f80ed;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 0 8px rgba(47,128,237,0.54));
+      stroke-dasharray: 360;
+      stroke-dashoffset: 360;
+      animation: nextDrawLine 1.8s var(--ease-smooth) forwards;
+    }
+    .next-bars {
+      display: grid;
+      grid-template-columns: repeat(24, minmax(0, 1fr));
+      align-items: end;
+      gap: 5px;
+      height: 78px;
+      margin-top: 4px;
+      padding-top: 14px;
+    }
+    .next-bars i {
+      display: block;
+      min-height: 5px;
+      height: var(--h, 18px);
+      border-radius: 999px 999px 4px 4px;
+      background: linear-gradient(180deg, #36c5f0, #2f80ed 54%, #7c4dff);
+      box-shadow: 0 0 12px rgba(54,197,240,0.28);
+      transform-origin: bottom;
+      animation: nextBarRise 850ms var(--ease-smooth) both;
+      animation-delay: var(--delay, 0ms);
+    }
+    .next-system-card {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr);
+      gap: 16px;
+      align-items: center;
+    }
+    .next-system-ring {
+      --ring-color: #38e86b;
+      width: 86px;
+      height: 86px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      position: relative;
+      color: var(--ring-color);
+      background:
+        radial-gradient(circle, rgba(5,11,24,0.96) 0 54%, transparent 56%),
+        conic-gradient(var(--ring-color) 0 82%, rgba(54,197,240,0.12) 0);
+      box-shadow: 0 0 30px rgba(56,232,107,0.18);
+    }
+    .next-system-ring::before,
+    .next-system-ring::after {
+      content: "";
+      position: absolute;
+      inset: 6px;
+      border-radius: inherit;
+      border: 1px solid rgba(56,232,107,0.34);
+      animation: nextRadar 2.3s var(--ease-smooth) infinite;
+    }
+    .next-system-ring::after {
+      animation-delay: 850ms;
+    }
+    .next-system-ring span {
+      position: relative;
+      z-index: 1;
+      font-size: 28px;
+      font-weight: 900;
+    }
+    .next-system-title {
+      margin: 0 0 6px;
+      color: #38e86b;
+      font-size: 24px;
+      font-weight: 850;
+      line-height: 1;
+    }
+    .next-system-subtitle {
+      margin: 0;
+      color: #8ca0b8;
+      line-height: 1.35;
+    }
+    .next-mini-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .next-mini-card {
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(54,197,240,0.15);
+      background: rgba(16,27,45,0.58);
+    }
+    .next-mini-card small {
+      display: block;
+      margin-bottom: 7px;
+      color: #8ca0b8;
+    }
+    .next-mini-card strong {
+      color: #38e86b;
+      font-size: 14px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .next-copy-layout {
+      display: grid;
+      grid-template-columns: 170px minmax(0, 1fr);
+      gap: 22px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+    .next-progress-ring {
+      --progress: 0;
+      width: 154px;
+      height: 154px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      position: relative;
+      background:
+        radial-gradient(circle, #0b1424 0 54%, transparent 56%),
+        conic-gradient(#36c5f0 calc(var(--progress) * 1%), rgba(47,128,237,0.16) 0);
+      box-shadow: 0 0 34px rgba(54,197,240,0.18), inset 0 0 24px rgba(47,128,237,0.16);
+      animation: nextRingPulse 2.8s var(--ease-smooth) infinite;
+    }
+    .next-progress-ring::before {
+      content: "";
+      position: absolute;
+      inset: 12px;
+      border-radius: inherit;
+      border: 1px solid rgba(54,197,240,0.44);
+      box-shadow: inset 0 0 20px rgba(47,128,237,0.2);
+    }
+    .next-progress-ring strong {
+      position: relative;
+      z-index: 1;
+      font-size: 34px;
+      line-height: 1;
+    }
+    .next-progress-ring span {
+      position: relative;
+      z-index: 1;
+      display: block;
+      margin-top: 5px;
+      color: #8ca0b8;
+      font-size: 12px;
+      text-align: center;
+    }
+    .next-copy-summary {
+      min-width: 0;
+      padding: 20px;
+      border: 1px solid rgba(54,197,240,0.13);
+      border-radius: 20px;
+      background: rgba(16,27,45,0.55);
+    }
+    .next-copy-summary h3 {
+      margin: 0 0 8px;
+      font-size: 18px;
+    }
+    .next-copy-summary p {
+      margin: 0;
+      color: #8ca0b8;
+      line-height: 1.45;
+    }
+    .next-flow-line {
+      position: relative;
+      height: 2px;
+      margin-top: 24px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(47,128,237,0.14), rgba(54,197,240,0.84), rgba(47,128,237,0.14));
+    }
+    .next-flow-line::before,
+    .next-flow-line::after {
+      content: "";
+      position: absolute;
+      top: -6px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #36c5f0;
+      box-shadow: 0 0 20px rgba(54,197,240,0.78);
+      animation: nextFlowDot 2s linear infinite;
+    }
+    .next-flow-line::after {
+      animation-delay: 950ms;
+    }
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .metric {
+      position: relative;
+      min-height: 112px;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, rgba(47,128,237,0.10), transparent 42%),
+        rgba(16,27,45,0.56) !important;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .metric::after {
+      content: "";
+      position: absolute;
+      inset: auto 14px 10px 14px;
+      height: 32px;
+      opacity: 0.5;
+      background:
+        linear-gradient(135deg, transparent 10%, rgba(54,197,240,0.14) 11% 14%, transparent 15% 30%, rgba(47,128,237,0.16) 31% 35%, transparent 36% 48%, rgba(124,77,255,0.14) 49% 52%, transparent 53%);
+      mask-image: linear-gradient(180deg, transparent, #000 28%, #000 74%, transparent);
+      pointer-events: none;
+    }
+    .metric-topline {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .metric-icon {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 12px;
+      border: 1px solid rgba(54,197,240,0.15);
+      background: rgba(47,128,237,0.15);
+      color: #36c5f0;
+      box-shadow: 0 0 22px rgba(47,128,237,0.18);
+    }
+    .metric .k {
+      margin-bottom: 0;
+    }
+    .metric .v {
+      position: relative;
+      z-index: 1;
+    }
+    .metric-spark {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: 11px;
+      height: 32px;
+      opacity: 0.82;
+      pointer-events: none;
+      color: #36c5f0;
+      filter: drop-shadow(0 0 8px rgba(54,197,240,0.36));
+    }
+    .metric-spark path {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 120;
+      stroke-dashoffset: 120;
+      animation: nextDrawLine 1.7s var(--ease-smooth) forwards;
+    }
+    .metric[data-metric-id="gotify"] .metric-icon,
+    .metric[data-metric-id="scheduler"] .metric-icon {
+      color: #7c4dff;
+      background: rgba(124,77,255,0.15);
+    }
+    .metric[data-metric-id="logging"] .metric-icon {
+      color: #f2c94c;
+      background: rgba(242,201,76,0.12);
+    }
+    .metric[data-metric-id="watcher"] .metric-icon {
+      color: #38e86b;
+      background: rgba(56,232,107,0.12);
+    }
+    @keyframes nextLiveDot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(0.74); opacity: 0.62; }
+    }
+    @keyframes nextDrawLine {
+      to { stroke-dashoffset: 0; }
+    }
+    @keyframes nextBarRise {
+      from { transform: scaleY(0.05); opacity: 0.35; }
+      to { transform: scaleY(1); opacity: 1; }
+    }
+    @keyframes nextRadar {
+      from { transform: scale(0.72); opacity: 0.85; }
+      to { transform: scale(1.55); opacity: 0; }
+    }
+    @keyframes nextRingPulse {
+      0%, 100% { transform: scale(0.99); }
+      50% { transform: scale(1.025); }
+    }
+    @keyframes nextFlowDot {
+      from { left: 0; }
+      to { left: calc(100% - 14px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .next-live-dot,
+      .next-speed-line,
+      .next-bars i,
+      .next-system-ring::before,
+      .next-system-ring::after,
+      .next-progress-ring,
+      .next-flow-line::before,
+      .next-flow-line::after,
+      .metric-spark path {
+        animation: none !important;
+      }
+    }
     body {
       font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
       color: #d8e6f3;
@@ -2224,6 +2693,48 @@
       background:
         linear-gradient(135deg, rgba(47, 128, 237, 0.18), transparent 40%),
         rgba(11, 20, 36, 0.78) !important;
+    }
+    .hero {
+      min-height: 0;
+      padding: 0 !important;
+      border: 0 !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+    }
+    .hero-top {
+      display: block;
+      min-width: 0;
+    }
+    .hero-logo {
+      display: none;
+    }
+    .hero-message {
+      min-height: 42px;
+      width: 100%;
+      max-width: none;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      text-align: left;
+      border-radius: 16px;
+      border: 1px solid rgba(54,197,240,0.12);
+      background: rgba(16,27,45,0.42);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    }
+    .hero-message:not(.is-visible) {
+      visibility: hidden;
+    }
+    .hero-actions {
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: nowrap;
+    }
+    .hero-actions > button {
+      min-width: 118px;
     }
     .hero-logo-text,
     .eyebrow,
@@ -2308,6 +2819,27 @@
         margin: 0;
         padding: 18px;
       }
+      .next-topbar,
+      .next-dashboard-grid,
+      .next-copy-layout {
+        grid-template-columns: 1fr;
+      }
+      .next-topbar {
+        position: static;
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .hero {
+        grid-template-columns: 1fr;
+      }
+      .hero-actions {
+        flex-wrap: wrap;
+        justify-content: stretch;
+      }
+      .next-topbar-side {
+        width: 100%;
+        justify-content: space-between;
+      }
     }
   </style>
 </head>
@@ -2333,8 +2865,30 @@
       <button class="next-sidebar-action" type="button" onclick="enqueueProfile('heavy')">Heavy</button>
       <button class="next-sidebar-action" type="button" onclick="enqueueAllQueues()">Все очереди</button>
     </div>
+    <div class="next-sidebar-live">
+      <div class="next-live-row">
+        <span style="display:flex; align-items:center; gap:8px;"><i class="next-live-dot"></i>Система</span>
+        <strong id="nextSidebarStatus">онлайн</strong>
+      </div>
+      <svg class="next-mini-wave" viewBox="0 0 210 34" aria-hidden="true">
+        <path d="M2 24 C15 4 25 30 36 18 S55 10 66 24 86 32 96 15 113 7 126 23 146 31 157 16 176 8 188 23 199 31 208 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
   </aside>
   <div class="shell">
+    <header class="next-topbar">
+      <div class="next-title">
+        <div class="next-title-mark">▦</div>
+        <div>
+          <h1>Обзор системы</h1>
+          <p>Мониторинг и управление задачами Rclone</p>
+        </div>
+      </div>
+      <div class="next-topbar-side">
+        <div class="next-clock"><span id="nextClock">--:--</span><small id="nextDate">Europe/Moscow</small></div>
+        <div class="next-system-pill"><i class="next-live-dot"></i><span id="nextSystemText">Проверка состояния</span></div>
+      </div>
+    </header>
     <section class="hero">
       <div class="hero-top">
         <div class="hero-logo">
@@ -2358,13 +2912,75 @@
 
     <section class="status-grid" id="statusGrid"></section>
 
-    <section class="panel copy-progress-panel" id="copyProgressPanel">
-      <div class="panel-header">
-        <div>
-          <h3>Прогресс копирования</h3>
+    <section class="next-dashboard-grid">
+      <section class="panel copy-progress-panel" id="copyProgressPanel">
+        <div class="panel-header">
+          <div>
+            <h3>Прогресс копирования</h3>
+          </div>
         </div>
-      </div>
-      <div class="copy-progress-list" id="copyProgressList"></div>
+        <div class="next-copy-layout">
+          <div class="next-progress-ring" id="nextProgressRing">
+            <div>
+              <strong id="nextProgressValue">0%</strong>
+              <span>Прогресс</span>
+            </div>
+          </div>
+          <div class="next-copy-summary">
+            <h3 id="nextCopyTitle">Активных задач копирования сейчас нет.</h3>
+            <p id="nextCopyMeta">Ожидающие задачи будут выполнены автоматически.</p>
+            <div class="next-flow-line" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="copy-progress-list" id="copyProgressList"></div>
+      </section>
+
+      <aside class="next-dashboard-rail" aria-label="Live dashboard">
+        <section class="panel next-chart-card">
+          <div class="next-chart-head">
+            <div>
+              <h3 class="next-chart-title">Скорость передачи</h3>
+              <p class="next-chart-value" id="nextSpeedValue">0 Мбит/с</p>
+            </div>
+            <span class="next-chart-select">Текущая</span>
+          </div>
+          <svg class="next-speed-chart" viewBox="0 0 320 92" aria-hidden="true">
+            <defs>
+              <linearGradient id="nextSpeedFill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#36C5F0" stop-opacity="0.32"/>
+                <stop offset="100%" stop-color="#2F80ED" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path class="next-speed-area" id="nextSpeedArea" d=""></path>
+            <path class="next-speed-line" id="nextSpeedLine" d=""></path>
+          </svg>
+        </section>
+
+        <section class="panel next-chart-card">
+          <div class="next-chart-head">
+            <div>
+              <h3 class="next-chart-title">Данные скопировано</h3>
+              <p class="next-chart-value" id="nextTrafficValue">0 Б</p>
+            </div>
+            <span class="next-chart-select">Последние</span>
+          </div>
+          <div class="next-bars" id="nextTrafficBars" aria-hidden="true"></div>
+        </section>
+
+        <section class="panel next-chart-card">
+          <div class="next-system-card">
+            <div class="next-system-ring"><span id="nextSystemGlyph">✓</span></div>
+            <div>
+              <p class="next-system-title" id="nextSystemTitle">ГОТОВ</p>
+              <p class="next-system-subtitle" id="nextSystemSubtitle">Все сервисы проверяются</p>
+            </div>
+          </div>
+          <div class="next-mini-grid">
+            <div class="next-mini-card"><small>Планировщик</small><strong id="nextSchedulerState">--</strong></div>
+            <div class="next-mini-card"><small>Наблюдатель</small><strong id="nextWatcherState">--</strong></div>
+          </div>
+        </section>
+      </aside>
     </section>
 
     <div class="main-grid">
@@ -3083,6 +3699,7 @@
       statusWidgetDrag: { active: false, widgetId: null },
       suppressMetricClickUntil: 0,
       lastSnapshot: null,
+      dashboardSpeedHistory: Array.from({ length: 28 }, () => 0),
       excludePathEntries: [],
       browseTarget: "source",
       browseEntries: [],
@@ -3561,6 +4178,163 @@
       ];
     }
 
+    function nextText(id, value) {
+      const node = document.getElementById(id);
+      if (node) node.textContent = value;
+    }
+
+    function metricIcon(metricId) {
+      return ({
+        "open-runs": "⌁",
+        "jobs-count": "▤",
+        "copy-speed": "◒",
+        "database": "▣",
+        "antibot": "◇",
+        "logging": "≡",
+        "gotify": "◉",
+        "watcher": "◎",
+        "scheduler": "▦",
+      })[metricId] || "≋";
+    }
+
+    function metricSparkline(metricId) {
+      const variants = {
+        "open-runs": "M1 25 C12 7 24 31 36 17 S61 10 74 24 96 20 112 9",
+        "jobs-count": "M1 23 L15 23 L24 13 L38 24 L52 11 L67 22 L82 17 L96 25 L112 12",
+        "copy-speed": "M1 26 C18 22 20 9 34 13 S54 30 70 18 87 6 112 17",
+        "database": "M1 22 C15 18 21 24 34 18 S55 8 70 18 88 30 112 12",
+        "logging": "M1 24 L18 20 L34 23 L51 12 L69 18 L84 11 L101 15 L112 9",
+        "gotify": "M1 27 C13 9 25 27 38 12 S62 8 75 21 95 28 112 10",
+        "watcher": "M1 18 C16 7 25 28 39 18 S61 5 75 16 91 27 112 9",
+        "scheduler": "M1 21 C18 20 22 11 36 12 S55 27 70 17 91 10 112 22",
+      };
+      return variants[metricId] || "M1 24 C16 12 27 28 42 16 S68 9 84 20 100 26 112 13";
+    }
+
+    function dashboardSpeedMegabits(snapshot) {
+      const apiMegabitsValue = Number(snapshot?.total_copy_speed_megabits_per_second);
+      if (Number.isFinite(apiMegabitsValue)) return Math.max(0, apiMegabitsValue);
+      const apiBytesValue = Number(snapshot?.total_copy_speed_bytes_per_second);
+      if (Number.isFinite(apiBytesValue)) return Math.max(0, apiBytesValue * 8 / 1000000);
+      const totalBytesPerSecond = (Array.isArray(snapshot?.copy_progress) ? snapshot.copy_progress : []).reduce((sum, item) => {
+        if (String(item?.status || "") !== "running") return sum;
+        const speed = parseSpeedToBytesPerSecond(item?.speed);
+        return sum + (Number.isFinite(speed) ? speed : 0);
+      }, 0);
+      return Math.max(0, totalBytesPerSecond * 8 / 1000000);
+    }
+
+    function latestRunsTraffic(snapshot) {
+      return (Array.isArray(snapshot?.latest_runs) ? snapshot.latest_runs : []).reduce((sum, run) => {
+        const bytes = Number(run.transferred_bytes || run.total_bytes || 0);
+        return sum + (Number.isFinite(bytes) ? Math.max(0, bytes) : 0);
+      }, 0);
+    }
+
+    function renderNextSpeedChart(snapshot) {
+      const speed = dashboardSpeedMegabits(snapshot);
+      state.dashboardSpeedHistory.push(speed);
+      state.dashboardSpeedHistory = state.dashboardSpeedHistory.slice(-28);
+      nextText("nextSpeedValue", formatMegabitsPerSecondNumber(speed, true));
+
+      const line = document.getElementById("nextSpeedLine");
+      const area = document.getElementById("nextSpeedArea");
+      if (!line || !area) return;
+
+      const rawValues = state.dashboardSpeedHistory.length ? state.dashboardSpeedHistory : [0];
+      const hasSignal = rawValues.some((value) => Number(value) > 0);
+      const values = hasSignal
+        ? rawValues
+        : rawValues.map((_, index) => 0.11 + ((Math.sin(index * 0.88) + 1) / 2) * 0.13);
+      const max = Math.max(1, ...values);
+      const width = 320;
+      const height = 76;
+      const baseY = 84;
+      const points = values.map((value, index) => {
+        const x = values.length <= 1 ? 0 : (index / (values.length - 1)) * width;
+        const y = baseY - (Math.max(0, value) / max) * height;
+        return [Number(x.toFixed(1)), Number(y.toFixed(1))];
+      });
+      const path = points.map(([x, y], index) => `${index ? "L" : "M"}${x} ${y}`).join(" ");
+      const areaPath = `${path} L${width} ${baseY} L0 ${baseY} Z`;
+      line.setAttribute("d", path);
+      area.setAttribute("d", areaPath);
+      line.style.animation = "none";
+      window.requestAnimationFrame(() => {
+        line.style.animation = "";
+      });
+    }
+
+    function renderNextTrafficBars(snapshot) {
+      const bars = document.getElementById("nextTrafficBars");
+      if (!bars) return;
+      const runs = (Array.isArray(snapshot?.latest_runs) ? snapshot.latest_runs : []).slice(0, 24).reverse();
+      const values = runs.map((run, index) => {
+        const bytes = Number(run.transferred_bytes || run.total_bytes || 0);
+        if (Number.isFinite(bytes) && bytes > 0) return bytes;
+        if (run.status === "failed") return 0.35 + (index % 3) * 0.12;
+        if (run.status === "stopped") return 0.5 + (index % 4) * 0.1;
+        return run.status === "succeeded" ? 1 + (index % 7) * 0.18 : 0.4;
+      });
+      while (values.length < 24) values.unshift(0.2 + (values.length % 6) * 0.15);
+      const max = Math.max(1, ...values);
+      bars.innerHTML = values.slice(-24).map((value, index) => {
+        const height = 8 + (Math.max(0, value) / max) * 66;
+        return `<i style="--h:${height.toFixed(0)}px; --delay:${index * 26}ms"></i>`;
+      }).join("");
+
+      const statsTraffic = Number(state.stats?.summary?.transfer?.traffic_bytes || 0);
+      const latestTraffic = latestRunsTraffic(snapshot);
+      nextText("nextTrafficValue", formatFileSize(statsTraffic || latestTraffic));
+    }
+
+    function renderNextProgressSummary(snapshot) {
+      const items = Array.isArray(snapshot?.copy_progress) ? snapshot.copy_progress : [];
+      const active = items.filter((item) => ["running", "queued", "paused"].includes(String(item.status || "")));
+      const running = active.filter((item) => String(item.status || "") === "running");
+      const percents = running.map(copyProgressPercent).filter((value) => Number.isFinite(Number(value)));
+      const average = percents.length
+        ? percents.reduce((sum, value) => sum + Number(value), 0) / percents.length
+        : 0;
+      const ring = document.getElementById("nextProgressRing");
+      if (ring) ring.style.setProperty("--progress", String(Math.max(0, Math.min(100, average))));
+      nextText("nextProgressValue", `${Math.round(average)}%`);
+
+      if (active.length) {
+        const first = active[0];
+        nextText("nextCopyTitle", first.title || first.job_key || "Активная задача");
+        nextText("nextCopyMeta", `${active.length} активных или ожидающих операций • ${first.activity || first.current || first.status || "runtime"}`);
+      } else {
+        const openRuns = Number(snapshot?.open_runs_total || 0);
+        nextText("nextCopyTitle", openRuns ? `${openRuns} запусков без активного копирования` : "Активных задач копирования сейчас нет.");
+        nextText("nextCopyMeta", openRuns ? "Выполняются служебные этапы или ожидание очереди." : "Ожидающие задачи будут выполнены автоматически.");
+      }
+    }
+
+    function renderDashboardVisuals(snapshot) {
+      if (!snapshot) return;
+      renderNextProgressSummary(snapshot);
+      renderNextSpeedChart(snapshot);
+      renderNextTrafficBars(snapshot);
+
+      const schedulerOk = snapshot.scheduler_enabled !== false && Boolean(snapshot.scheduler_alive);
+      const watcherOk = Boolean(state.watcher?.enabled) && Boolean(state.watcherRuntime?.component_running || snapshot.watcher?.component_running);
+      const systemOk = schedulerOk && (state.watcher?.enabled ? watcherOk : true);
+      nextText("nextSystemText", systemOk ? "Система работает стабильно" : "Требуется внимание");
+      nextText("nextSidebarStatus", systemOk ? "онлайн" : "проверить");
+      nextText("nextSystemGlyph", systemOk ? "✓" : "!");
+      nextText("nextSystemTitle", systemOk ? "ГОТОВ" : "ВНИМАНИЕ");
+      nextText("nextSystemSubtitle", systemOk ? "Все основные сервисы работают" : "Проверьте scheduler, watcher или очереди");
+      nextText("nextSchedulerState", schedulerOk ? "работает" : "выкл");
+      nextText("nextWatcherState", watcherOk ? "работает" : (state.watcher?.enabled ? "сбой" : "выкл"));
+    }
+
+    function tickNextTopbar() {
+      const now = new Date();
+      nextText("nextClock", now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }));
+      nextText("nextDate", `${now.toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" })} • UTC+3`);
+    }
+
     function copyProgressPercent(item) {
       if (isArchiveScanning(item)) return null;
       const transferredBytes = parseDataSizeToBytes(item?.transferred);
@@ -3913,7 +4687,7 @@
           container.innerHTML = `<div class="empty">${escapeHtml(fallback.title || fallback.job_key || "job")} • ${escapeHtml(fallback.profile || "")}<br />${escapeHtml(kindLabel)}</div>`;
           return;
         }
-        container.innerHTML = `<div class="empty">Активных задач копирования сейчас нет.</div>`;
+        container.innerHTML = "";
         return;
       }
       container.innerHTML = items.map((item) => {
@@ -5128,8 +5902,12 @@
       const previousPositions = measureStatusWidgets(statusGrid);
       statusGrid.innerHTML = orderedStatusMetrics(metrics(snapshot)).map((item) => `
         <div class="metric ${item.clickable ? "clickable " : ""}ui-tooltip${item.tooltip ? " has-tooltip" : ""}" draggable="true" data-status-widget-id="${escapeHtml(item.metricId)}"${item.metricId ? ` data-metric-id="${escapeHtml(item.metricId)}"` : ""}${item.tooltip ? ` data-tooltip="${escapeHtml(item.tooltip)}" tabindex="0"` : ""}${item.clickable && item.metricId ? ` role="button" onclick="toggleStatusMetric('${escapeHtml(escapeJsString(item.metricId))}')" onkeydown="handleMetricKeydown(event, '${escapeHtml(escapeJsString(item.metricId))}')"` : ""}>
-          <div class="k">${escapeHtml(String(item.key ?? ""))}</div>
+          <div class="metric-topline">
+            <span class="metric-icon">${escapeHtml(metricIcon(item.metricId))}</span>
+            <div class="k">${escapeHtml(String(item.key ?? ""))}</div>
+          </div>
           <div class="v ${(item.tight ? "tight " : "") + (item.valueClass || "")}">${escapeHtml(String(item.value ?? ""))}</div>
+          <svg class="metric-spark" viewBox="0 0 114 34" aria-hidden="true"><path d="${escapeHtml(metricSparkline(item.metricId))}"/></svg>
         </div>
       `).join("");
       animateStatusWidgetChanges(previousPositions);
@@ -7816,6 +8594,7 @@
       renderStatus(snapshot);
       renderCopyProgress(snapshot.copy_progress || [], snapshot.active_operations || []);
       renderRuns(snapshot.latest_runs || []);
+      renderDashboardVisuals(snapshot);
       if (state.showStats) {
         refreshStatisticsSummary({ silent: true }).catch(() => {});
       }
@@ -7850,6 +8629,7 @@
         state.logging = jobsPayload.logging || state.logging;
         state.watcher = jobsPayload.watcher || state.watcher;
         renderStatus(state.lastSnapshot || snapshot);
+        renderDashboardVisuals(state.lastSnapshot || snapshot);
         updateServiceMessage(state.lastSnapshot || snapshot);
         applyLatestJobRuns(snapshot, { rerender: false });
         renderJobs();
@@ -8007,6 +8787,8 @@
     bindStatusWidgetDrag();
     bindEditorCollapsibles();
     bindRunsHistoryTooltipLayer();
+    tickNextTopbar();
+    setInterval(tickNextTopbar, 1000);
     refreshAll();
     setInterval(() => {
       refreshAntiBotMetric();
