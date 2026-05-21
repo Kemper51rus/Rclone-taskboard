@@ -52,6 +52,7 @@ class Settings:
     output_tail_chars: int
     dry_run: bool
     api_token: str | None
+    cors_origins: list[str]
 
 
 def load_settings() -> Settings:
@@ -68,6 +69,11 @@ def load_settings() -> Settings:
     rclone_config_file = Path(
         os.getenv("TASKBOARD_RCLONE_CONFIG", Path.home() / ".config" / "rclone" / "rclone.conf")
     ).expanduser()
+    cors_origins = [
+        item.strip()
+        for item in os.getenv("TASKBOARD_CORS_ORIGINS", "").split(",")
+        if item.strip()
+    ]
 
     standard_interval = max(1, _read_int("TASKBOARD_STANDARD_INTERVAL_MINUTES", 1))
     heavy_hour = _read_int("TASKBOARD_HEAVY_HOUR", 3)
@@ -102,4 +108,5 @@ def load_settings() -> Settings:
         output_tail_chars=max(512, _read_int("TASKBOARD_OUTPUT_TAIL_CHARS", 8000)),
         dry_run=_read_bool("TASKBOARD_DRY_RUN", False),
         api_token=os.getenv("TASKBOARD_API_TOKEN"),
+        cors_origins=cors_origins,
     )

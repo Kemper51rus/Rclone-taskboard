@@ -1,56 +1,19 @@
 # 📦 Deployment
 
-Проект поддерживает два варианта развертывания:
+Основной поддерживаемый вариант развертывания для LXC:
 
-- `docker`
 - `systemd`
-
----
-
-## 🐳 Docker Deployment
-
-В Docker-режиме запускается один сервис:
-
-- `taskboard-web`
-
-### Требования
-
-- Docker с Compose
-- Доступные host bind mounts:
-  - `/media`
-  - `/srv`
-  - `/root/.config/rclone`
-
-### Подготовка
-
-```bash
-cd taskboard
-cp .env.docker.example .env.docker
-```
-
-Проверьте:
-
-- `TASKBOARD_RCLONE_CONFIG`
-- `APP_TIMEZONE`
-- `TASKBOARD_API_TOKEN`
-
-### Запуск
-
-```bash
-docker compose --env-file .env.docker up -d --build
-```
-
-### Installer Script
-
-```bash
-sudo ./install.sh docker
-```
 
 ---
 
 ## 🖥️ Systemd Deployment
 
-В режиме `systemd` backend, scheduler и watcher работают внутри одного web-сервиса.
+В режиме `systemd` frontend и backend разделены:
+
+- `rclone-taskboard.service` — backend/API runtime, по умолчанию слушает `127.0.0.1:8081`
+- `rclone-taskboard-frontend.service` — статический frontend, по умолчанию слушает `0.0.0.0:8080` и проксирует `/api` в backend
+
+Так frontend можно обновлять, перезапускать или переносить в другой LXC без рестарта backend. Для внешнего frontend укажите `TASKBOARD_FRONTEND_API_PROXY_URL=http://<backend-host>:8081` в `.env.frontend`; на backend-LXC в этом случае задайте `TASKBOARD_BACKEND_HOST=0.0.0.0` или откройте API через свой reverse-proxy. Если браузер должен обращаться к backend напрямую, настройте `TASKBOARD_CORS_ORIGINS` в backend `.env`.
 
 ## Единый installer
 
@@ -63,7 +26,6 @@ sudo ./install.sh
 Скрипт работает как интерактивное меню и умеет:
 
 - поставить или обновить deployment через `systemd`
-- поставить или обновить deployment через `docker`
 - подтянуть исходники из Git перед установкой
 - проверить зависимости и предложить доустановить недостающие
 - выбрать начальный каталог задач: с примерами или пустой список задач без шаблона
@@ -92,7 +54,6 @@ Legacy-cleanup покрывает старые файлы:
 
 ```bash
 sudo ./install.sh systemd
-sudo ./install.sh docker
 sudo ./install.sh migrate-legacy
 sudo ./install.sh uninstall
 ```
@@ -109,6 +70,7 @@ sudo ./install.sh uninstall
 
 ```bash
 cp taskboard/.env.systemd.example taskboard/.env
+cp taskboard/.env.frontend.example taskboard/.env.frontend
 ```
 
 Проверьте:
@@ -130,6 +92,7 @@ sudo ./install.sh systemd
 
 ```bash
 systemctl status rclone-taskboard.service --no-pager
+systemctl status rclone-taskboard-frontend.service --no-pager
 ```
 
 Unit `rclone-taskboard.service` задаёт `LimitNOFILE=8192`.
@@ -151,7 +114,9 @@ sudo ./install.sh migrate-legacy
 
 Проверьте:
 
-- `GET /api/health`
+- `GET http://<host>:8080/frontend-health`
+- `GET http://<host>:8080/api/health` через frontend proxy
+- `GET http://127.0.0.1:8081/api/health` напрямую в backend
 - `GET /api/state`
 - `GET /api/system`
 - ручной запуск профиля или задачи
@@ -164,5 +129,4 @@ sudo ./install.sh migrate-legacy
 
 | Режим | Когда подходит лучше |
 | --- | --- |
-| `docker` | Удобнее контейнерный запуск |
 | `systemd` | Нужна прямая интеграция с системой и запуск на хосте |

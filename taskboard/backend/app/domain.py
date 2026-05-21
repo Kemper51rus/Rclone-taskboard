@@ -13,6 +13,7 @@ VALID_TRANSFER_MODES = {"copy", "sync"}
 VALID_JOB_KINDS = {"backup", "command"}
 VALID_SCHEDULE_MODES = {"manual", "interval", "daily", "weekly"}
 VALID_EXCLUDE_PATH_KINDS = {"directory", "file"}
+ARCHIVE_FILENAME_TOKENS = {"{key}", "{date}"}
 DISABLED_BWLIMIT_VALUES = {"off", "none", "unlimited", "disabled", "0", "0b", "0k", "0m", "0g"}
 VALID_DEBUG_DUMP_VALUES = {"headers", "headers,bodies"}
 SINGLETON_RCLONE_FLAGS = {
@@ -25,6 +26,8 @@ SINGLETON_RCLONE_FLAGS = {
     "--retries-sleep",
     "--timeout",
     "--contimeout",
+    "--stats",
+    "--stats-file-name-length",
     "--log-level",
     "--dump",
 }
@@ -45,8 +48,9 @@ DEFAULT_RCLONE_ARGS = [
     "--checkers",
     "8",
     "--stats",
-    "10s",
-    "--stats-one-line",
+    "1s",
+    "--stats-file-name-length",
+    "96",
     "--log-level",
     "INFO",
 ]
@@ -509,6 +513,37 @@ class RetentionSettings:
 
 
 @dataclass(frozen=True)
+class ArchiveSettings:
+    enabled: bool = False
+    filename_template: str = "{key}-{date}.7z"
+    date_format: str = "%Y-%m-%d_%H-%M-%S"
+    compression_level: int = 5
+    temp_dir: str | None = None
+    password: str | None = None
+    encrypt_headers: bool = False
+
+    def normalized(self) -> ArchiveSettings:
+        filename_template = str(self.filename_template or "").strip() or "{key}-{date}.7z"
+        if "{date}" not in filename_template:
+            stem = filename_template[:-3] if filename_template.lower().endswith(".7z") else filename_template
+            filename_template = f"{stem}-{{date}}.7z"
+        if not filename_template.lower().endswith(".7z"):
+            filename_template = f"{filename_template}.7z"
+        return ArchiveSettings(
+            enabled=bool(self.enabled),
+            filename_template=filename_template,
+            date_format=str(self.date_format or "").strip() or "%Y-%m-%d_%H-%M-%S",
+            compression_level=max(0, min(9, int(self.compression_level if self.compression_level is not None else 5))),
+            temp_dir=(str(self.temp_dir or "").strip() or None),
+            password=(str(self.password or "").strip() or None),
+            encrypt_headers=bool(self.encrypt_headers),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self.normalized())
+
+
+@dataclass(frozen=True)
 class GotifySettings:
     enabled: bool = False
     url: str | None = None
@@ -730,6 +765,7 @@ class JobDefinition:
     transfer_mode: str = "copy"
     options: BackupOptions = field(default_factory=BackupOptions)
     retention: RetentionSettings = field(default_factory=RetentionSettings)
+    archive: ArchiveSettings = field(default_factory=ArchiveSettings)
     notifications: JobNotificationSettings = field(default_factory=JobNotificationSettings)
     watcher_enabled: bool = False
 
@@ -746,6 +782,9 @@ class JobDefinition:
         schedule = self.schedule.validate()
         options = self.options.normalized()
         retention = self.retention.normalized()
+        archive = self.archive.normalized()
+        if kind != "backup":
+            archive = ArchiveSettings()
         notifications = self.notifications.normalized()
         watcher_enabled = bool(self.watcher_enabled) and kind == "backup" and bool(source_path)
         description = self.description.strip() or raw_key
@@ -753,12 +792,19 @@ class JobDefinition:
         if kind != "backup" or transfer_mode == "sync":
             retention = RetentionSettings()
         if kind == "backup" and source_path and destination_path:
-            command = self.build_backup_command(
-                transfer_mode=transfer_mode,
-                source_path=source_path,
-                destination_path=destination_path,
-                options=options,
-            )
+            if archive.enabled:
+                command = self.build_archive_command(
+                    source_path=source_path,
+                    destination_path=destination_path,
+                    archive=archive,
+                )
+            else:
+                command = self.build_backup_command(
+                    transfer_mode=transfer_mode,
+                    source_path=source_path,
+                    destination_path=destination_path,
+                    options=options,
+                )
         return JobDefinition(
             key=raw_key,
             order=max(1, int(self.order or 1)),
@@ -778,6 +824,7 @@ class JobDefinition:
             transfer_mode=transfer_mode,
             options=options,
             retention=retention,
+            archive=archive,
             notifications=notifications,
             watcher_enabled=watcher_enabled,
         )
@@ -807,6 +854,36 @@ class JobDefinition:
             *options.to_args(transfer_mode=transfer_mode, source_path=source_path),
         ]
         return apply_rclone_bwlimit(normalize_single_value_flags(command), bandwidth_limit)
+
+    @staticmethod
+    def build_archive_command(
+        source_path: str,
+        destination_path: str,
+        archive: ArchiveSettings,
+    ) -> list[str]:
+        normalized = archive.normalized()
+        command = [
+            "python3",
+            "-m",
+            "app.archive_job",
+            "--source",
+            source_path,
+            "--destination",
+            destination_path,
+            "--filename-template",
+            normalized.filename_template,
+            "--date-format",
+            normalized.date_format,
+            "--compression-level",
+            str(normalized.compression_level),
+        ]
+        if normalized.temp_dir:
+            command.extend(["--temp-dir", normalized.temp_dir])
+        if normalized.password:
+            command.extend(["--password", normalized.password])
+        if normalized.encrypt_headers:
+            command.append("--encrypt-headers")
+        return command
 
     @staticmethod
     def build_retention_command(

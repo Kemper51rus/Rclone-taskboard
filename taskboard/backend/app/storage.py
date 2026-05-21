@@ -10,6 +10,7 @@ import threading
 from typing import Any
 
 from .domain import RunStepDefinition
+from .rclone_metrics import merge_progress
 
 
 SCHEMA_SQL = """
@@ -348,7 +349,7 @@ class Storage:
                         """,
                         (
                             finished_at,
-                            "recovered after service restart; unfinished steps marked stopped",
+                            "Остановлено после перезапуска сервиса; незавершённые шаги закрыты",
                             run_id,
                         ),
                     )
@@ -382,13 +383,16 @@ class Storage:
     def update_step_progress(self, step_id: int, progress: dict[str, Any]) -> None:
         with self._lock:
             with self._connect() as conn:
+                row = conn.execute("SELECT progress_json FROM run_steps WHERE id = ?", (step_id,)).fetchone()
+                existing = json.loads(row["progress_json"] or "null") if row else None
+                merged = merge_progress(existing, progress)
                 conn.execute(
                     """
                     UPDATE run_steps
                     SET progress_json = ?, progress_updated_at = ?
                     WHERE id = ?
                     """,
-                    (json.dumps(progress, ensure_ascii=False), utc_now_iso(), step_id),
+                    (json.dumps(merged, ensure_ascii=False), utc_now_iso(), step_id),
                 )
                 conn.commit()
 
@@ -500,7 +504,38 @@ class Storage:
                             FROM run_steps rs
                             WHERE rs.run_id = r.id
                               AND rs.step_kind = 'job'
-                        ) AS job_key
+                        ) AS job_key,
+                        (
+                            SELECT CASE WHEN COUNT(rs.transferred_bytes) > 0 THEN SUM(rs.transferred_bytes) ELSE NULL END
+                            FROM run_steps rs
+                            WHERE rs.run_id = r.id
+                        ) AS transferred_bytes,
+                        (
+                            SELECT CASE WHEN COUNT(rs.total_bytes) > 0 THEN SUM(rs.total_bytes) ELSE NULL END
+                            FROM run_steps rs
+                            WHERE rs.run_id = r.id
+                        ) AS total_bytes,
+                        (
+                            SELECT CASE WHEN COUNT(rs.file_count) > 0 THEN SUM(rs.file_count) ELSE NULL END
+                            FROM run_steps rs
+                            WHERE rs.run_id = r.id
+                        ) AS file_count,
+                        (
+                            SELECT CASE WHEN COUNT(rs.file_total) > 0 THEN SUM(rs.file_total) ELSE NULL END
+                            FROM run_steps rs
+                            WHERE rs.run_id = r.id
+                        ) AS file_total,
+                        (
+                            SELECT COUNT(*)
+                            FROM run_steps rs
+                            WHERE rs.run_id = r.id
+                              AND rs.status IN ('succeeded', 'failed', 'stopped')
+                        ) AS completed_steps,
+                        (
+                            SELECT COUNT(*)
+                            FROM run_steps rs
+                            WHERE rs.run_id = r.id
+                        ) AS total_steps
                     FROM runs r
                     ORDER BY id DESC
                     LIMIT ?

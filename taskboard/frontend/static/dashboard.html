@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Rclone taskboard</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <script src="/frontend-config.js"></script>
   <style>
     :root {
       color-scheme: dark;
@@ -677,8 +678,8 @@
     }
     #runsHistoryTooltip {
       position: fixed;
-      min-width: 220px;
-      max-width: 320px;
+      min-width: 240px;
+      max-width: min(560px, calc(100vw - 24px));
       padding: 10px 12px;
       border-radius: 12px;
       border: 1px solid rgba(124, 224, 255, 0.22);
@@ -687,9 +688,11 @@
       color: var(--text);
       font-size: 12px;
       line-height: 1.35;
-      white-space: normal;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
       pointer-events: none;
-      z-index: 120;
+      z-index: 2147483647;
     }
     #runsHistoryTooltip[hidden] {
       display: none;
@@ -697,7 +700,7 @@
     #runsHistoryTooltip::before {
       content: "";
       position: absolute;
-      left: 50%;
+      left: var(--tooltip-arrow-x, 50%);
       transform: translateX(-50%);
       border-style: solid;
     }
@@ -781,7 +784,7 @@
     }
     .copy-progress-bar {
       position: relative;
-      height: 14px;
+      height: 22px;
       margin: 12px 0 10px;
       border-radius: 999px;
       overflow: hidden;
@@ -799,6 +802,26 @@
         linear-gradient(90deg, rgba(124, 224, 255, 0.9), rgba(150, 255, 218, 0.92));
       box-shadow: 0 0 24px rgba(124, 224, 255, 0.24);
       transition: width var(--motion-standard) var(--ease-smooth);
+    }
+    .copy-progress-resource {
+      position: absolute;
+      z-index: 2;
+      top: 0;
+      right: 10px;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      max-width: calc(100% - 20px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: rgba(226, 239, 255, 0.92);
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+      pointer-events: none;
     }
     .copy-progress-fill.indeterminate {
       width: 42%;
@@ -1093,15 +1116,19 @@
       display: flex;
       flex-direction: column;
       min-height: 0;
+      container-type: inline-size;
     }
     .runs-list-wrap {
       display: flex;
       flex-direction: column;
       flex: 1 1 auto;
       min-height: 0;
+      min-width: 0;
       background: transparent;
     }
     .runs-list-scroll {
+      min-width: 0;
+      max-width: 100%;
       max-height: none;
       height: auto;
       overflow: visible;
@@ -1123,27 +1150,341 @@
       height: 0;
       display: none;
     }
-    #runsPanel[data-constrained="true"] thead th {
+    #runsPanel[data-constrained="true"] .runs-history-table thead th {
       position: sticky;
       top: 0;
       z-index: 2;
       background: linear-gradient(180deg, rgba(22, 31, 46, 0.98), rgba(13, 20, 31, 0.98));
       box-shadow: inset 0 -1px 0 var(--line);
     }
-    #runsPanel th,
-    #runsPanel td {
+    .runs-history-table th,
+    .runs-history-table td {
+      padding: 6px 8px;
+      line-height: 1.2;
+      vertical-align: middle;
       overflow-wrap: anywhere;
     }
-    #runsPanel th:nth-child(-n+5),
-    #runsPanel td:nth-child(-n+5) {
+    .runs-history-table th:nth-child(-n+4),
+    .runs-history-table td:nth-child(-n+4) {
       width: 1%;
+      max-width: 220px;
+      padding-left: 10px;
+      padding-right: 18px;
       white-space: nowrap;
       overflow-wrap: normal;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    #runsPanel th:nth-child(6),
-    #runsPanel td:nth-child(6) {
+    .runs-history-table th:nth-child(1),
+    .runs-history-table td:nth-child(1) { max-width: 72px; }
+    .runs-history-table th:nth-child(2),
+    .runs-history-table td:nth-child(2) { max-width: 116px; }
+    .runs-history-table th:nth-child(3),
+    .runs-history-table td:nth-child(3) { max-width: 240px; }
+    .runs-history-table th:nth-child(4),
+    .runs-history-table td:nth-child(4) { max-width: 220px; }
+    .runs-history-table th:nth-child(5),
+    .runs-history-table td:nth-child(5) {
       width: auto;
       white-space: normal;
+    }
+    .runs-tiles {
+      display: grid;
+      gap: 8px;
+      padding-top: 2px;
+      padding-bottom: 1px;
+      min-width: 0;
+      max-width: 100%;
+    }
+    .run-tile {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      max-width: 100%;
+      min-height: 44px;
+      overflow: hidden;
+      padding: 7px 9px 7px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background:
+        linear-gradient(135deg, rgba(124, 224, 255, 0.055), transparent 32%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.018));
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.015);
+      transition:
+        transform var(--motion-fast) var(--ease-smooth),
+        border-color var(--motion-fast) var(--ease-snappy),
+        background var(--motion-standard) var(--ease-smooth),
+        box-shadow var(--motion-standard) var(--ease-smooth);
+    }
+    .run-tile::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 10px;
+      bottom: 10px;
+      width: 3px;
+      border-radius: 0 999px 999px 0;
+      background: rgba(159, 179, 200, 0.38);
+    }
+    .run-tile.tone-ok::before {
+      background: var(--ok);
+      box-shadow: 0 0 12px rgba(90, 240, 155, 0.22);
+    }
+    .run-tile.tone-warn::before {
+      background: var(--warn);
+      box-shadow: 0 0 12px rgba(255, 204, 84, 0.2);
+    }
+    .run-tile.tone-bad::before {
+      background: var(--bad);
+      box-shadow: 0 0 12px rgba(255, 90, 104, 0.22);
+    }
+    .run-tile:hover,
+    .run-tile:focus-visible {
+      outline: none;
+      transform: translate3d(0, -1px, 0);
+      border-color: var(--line-strong);
+      background:
+        linear-gradient(135deg, rgba(124, 224, 255, 0.09), transparent 34%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.042), rgba(255, 255, 255, 0.022));
+      box-shadow: 0 10px 28px rgba(5, 12, 20, 0.18);
+    }
+    .run-tile-date {
+      display: flex;
+      align-items: center;
+      justify-self: start;
+      flex: 0 1 auto;
+      width: auto;
+      min-width: 0;
+      max-width: 104px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: left;
+      font-size: inherit;
+      font-weight: inherit;
+      font-variant-numeric: tabular-nums;
+      text-decoration: none;
+    }
+    .run-tile-date-value {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .run-tile-main {
+      display: flex;
+      flex: 1 1 auto;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .run-tile-status {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 76px;
+      width: 76px;
+      max-width: 76px;
+      min-height: 22px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+      font-size: inherit;
+      font-weight: inherit;
+      line-height: 1.15;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .run-tile-status.ok {
+      border-color: rgba(90, 240, 155, 0.36);
+      background: rgba(90, 240, 155, 0.08);
+      color: var(--ok);
+    }
+    .run-tile-status.warn {
+      border-color: rgba(255, 204, 84, 0.36);
+      background: rgba(255, 204, 84, 0.08);
+      color: var(--warn);
+    }
+    .run-tile-status.bad {
+      border-color: rgba(255, 90, 104, 0.36);
+      background: rgba(255, 90, 104, 0.08);
+      color: var(--bad);
+    }
+    .run-tile-pill,
+    .run-tile-date {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .run-tile-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 100%;
+      min-height: 24px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.03);
+      font-size: inherit;
+      font-weight: inherit;
+      line-height: 1.15;
+    }
+    button.run-tile-pill {
+      appearance: none;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    button.run-tile-pill:hover,
+    button.run-tile-pill:focus-visible,
+    button.run-tile-pill.is-active {
+      outline: none;
+      border-color: rgba(124, 224, 255, 0.44);
+      color: var(--accent-2);
+      background: rgba(124, 224, 255, 0.1);
+    }
+    .run-tile-pill-value {
+      display: block;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .run-tile-job {
+      flex: 0 1 auto;
+      flex-shrink: 1;
+      max-width: clamp(88px, 30vw, 190px);
+      color: var(--text);
+    }
+    .run-tile-transfer {
+      flex: 0 6 auto;
+      width: auto;
+      max-width: 100%;
+      border-color: rgba(124, 224, 255, 0.22);
+      color: var(--accent-2);
+      background: rgba(124, 224, 255, 0.06);
+    }
+    .run-tile-log {
+      flex: 0 0 auto;
+      border-color: rgba(124, 224, 255, 0.26);
+      color: var(--accent);
+      background: rgba(124, 224, 255, 0.05);
+    }
+    .run-tile-trigger {
+      flex: 0 0 auto;
+      border-color: rgba(159, 179, 200, 0.26);
+      color: var(--soft);
+      background: rgba(159, 179, 200, 0.05);
+    }
+    #runsPanel[data-runs-slot="right"] .run-tile {
+      gap: 8px;
+      min-height: 44px;
+      padding: 7px 8px 7px 14px;
+    }
+    #runsPanel[data-runs-slot="right"] .run-tile-main {
+      flex: 1 1 auto;
+      gap: 6px;
+    }
+    #runsPanel[data-runs-slot="right"] .run-tile-status {
+      flex: 0 0 76px;
+      width: 76px;
+      max-width: 76px;
+      padding-left: 6px;
+      padding-right: 6px;
+    }
+    #runsPanel[data-runs-slot="right"] .run-tile-job {
+      max-width: 128px;
+    }
+    #runsPanel[data-runs-slot="right"] .run-tile-date {
+      flex-basis: auto;
+      max-width: 104px;
+    }
+    @container (max-width: 620px) {
+      .run-tile {
+        gap: 8px;
+        min-height: 44px;
+        padding: 7px 8px 7px 14px;
+      }
+      .run-tile-main {
+        gap: 6px;
+      }
+      .run-tile-status {
+        flex: 0 0 76px;
+        width: 76px;
+        max-width: 76px;
+        padding-left: 6px;
+        padding-right: 6px;
+      }
+      .run-tile-job {
+        max-width: 128px;
+      }
+      .run-tile-date {
+        flex-basis: auto;
+        max-width: 104px;
+      }
+    }
+    .run-summary-cell {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      max-width: 100%;
+    }
+    #runsPanel td.run-status-log-cell {
+      cursor: pointer;
+    }
+    #runsPanel td.run-status-log-cell:hover,
+    #runsPanel td.run-status-log-cell:focus-visible {
+      outline: none;
+      color: var(--accent-2);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .run-transfer-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: clamp(150px, 32ch, 260px);
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-height: 24px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(124, 224, 255, 0.18);
+      color: var(--accent-2);
+      background: rgba(124, 224, 255, 0.06);
+      font-size: inherit;
+      font-weight: inherit;
+      line-height: 1.15;
+      text-align: center;
+    }
+    @media (max-width: 720px) {
+      .run-tile {
+        gap: 8px;
+        min-height: 44px;
+        padding: 7px 8px 7px 14px;
+      }
+      .run-tile-main {
+        gap: 6px;
+      }
+      .run-tile-date {
+        flex-basis: auto;
+        max-width: 104px;
+      }
     }
     .jobs-grid {
       display: grid;
@@ -1856,7 +2197,7 @@
 
         <div id="queuesPanelMenuSpacer" aria-hidden="true"></div>
         <div id="historySlotRight"></div>
-        <section class="panel" id="runsPanel">
+        <section class="panel" id="runsPanel" data-runs-slot="right">
           <div class="panel-header">
             <div>
               <h3>История запусков</h3>
@@ -1867,13 +2208,13 @@
           </div>
           <div class="runs-list-wrap">
             <div class="runs-list-scroll" id="runsListScroll">
-              <table>
+              <div class="runs-tiles" id="runsTiles" role="list"></div>
+              <table class="runs-history-table" id="runsTable" hidden>
                 <thead>
                   <tr>
                     <th>ID</th>
                     <th>Статус</th>
                     <th>Ключ задачи</th>
-                    <th>Триггер</th>
                     <th>Запрошен</th>
                     <th>Сводка</th>
                   </tr>
@@ -1928,7 +2269,10 @@
             </div>
 	            <div class="field full" data-job-kind="backup" data-cloud-mode="selected">
 	              <label for="jobDestinationSubpath">Путь внутри облака</label>
-              <input id="jobDestinationSubpath" placeholder="PHOTO/library/" />
+              <div class="row">
+                <input id="jobDestinationSubpath" placeholder="PHOTO/library/" />
+                <button type="button" class="secondary" onclick="openBrowser('cloud')">Выбрать</button>
+              </div>
             </div>
 	            <div class="field full" data-job-kind="backup" data-cloud-mode="selected">
 	              <label for="jobDestinationPreview">Итоговый удалённый путь</label>
@@ -1986,6 +2330,45 @@
               </div>
             </div>
           </div>
+
+
+          <details class="panel editor-collapsible" style="margin-top:16px; margin-bottom:0;" data-job-kind="backup">
+            <summary>
+              <h3>Архивация 7z</h3>
+            </summary>
+            <div class="editor-collapsible-body">
+              <div class="editor-grid">
+                <div class="field full">
+                  <button type="button" class="toggle-chip" id="archiveEnabled" aria-pressed="false">Сжать источник в 7z и загрузить архив в облако</button>
+                  <div class="field-meta">Вместо обычного rclone copy/sync будет создан временный `.7z` и загружен в папку назначения. Имя архива поддерживает `{key}` и `{date}`.</div>
+                </div>
+                <div class="field">
+                  <label for="archiveFilenameTemplate">Шаблон имени архива</label>
+                  <input id="archiveFilenameTemplate" placeholder="{key}-{date}.7z" />
+                </div>
+                <div class="field">
+                  <label for="archiveDateFormat">Формат даты</label>
+                  <input id="archiveDateFormat" placeholder="%Y-%m-%d_%H-%M-%S" />
+                </div>
+                <div class="field">
+                  <label for="archiveCompressionLevel">Уровень сжатия</label>
+                  <input id="archiveCompressionLevel" type="number" min="0" max="9" placeholder="5" />
+                </div>
+                <div class="field">
+                  <label for="archiveTempDir">Временный каталог</label>
+                  <input id="archiveTempDir" placeholder="по умолчанию системный tmp" />
+                </div>
+                <div class="field">
+                  <label for="archivePassword">Пароль архива</label>
+                  <input id="archivePassword" type="text" autocomplete="off" placeholder="без пароля" />
+                </div>
+                <div class="field full">
+                  <button type="button" class="toggle-chip" id="archiveEncryptHeaders" aria-pressed="false">Шифровать имена файлов в архиве</button>
+                  <div class="field-meta">Работает только вместе с паролем. В GUI пароль отображается открытым текстом.</div>
+                </div>
+              </div>
+            </div>
+          </details>
 
 	          <details class="panel editor-collapsible" style="margin-top:16px; margin-bottom:0;" data-job-kind="backup">
 	            <summary>
@@ -2439,6 +2822,8 @@
 
     const SHOW_LOG_FILTERS_STORAGE_KEY = "rcloneTaskboard.showLogFilters";
     const STATUS_WIDGET_ORDER_STORAGE_KEY = "rcloneTaskboard.statusWidgetOrder";
+    // Change to "table" to restore the previous runs history layout.
+    const RUNS_HISTORY_LAYOUT = "tiles";
 
     const state = {
       jobs: [],
@@ -2486,6 +2871,7 @@
     let watcherAutoSaveTimer = null;
     let queueAutoSaveTimer = null;
     let activeRunsTooltipTarget = null;
+    let activeRunsTooltipPointer = null;
     const defaultRcloneArgs = [
       "--contimeout", "30s",
       "--timeout", "10m",
@@ -2494,8 +2880,8 @@
       "--low-level-retries", "20",
       "--transfers", "2",
       "--checkers", "8",
-      "--stats", "10s",
-      "--stats-one-line",
+      "--stats", "1s",
+      "--stats-file-name-length", "96",
       "--log-level", "INFO",
     ];
     const previewSingletonFlags = new Set([
@@ -2508,6 +2894,8 @@
       "--retries-sleep",
       "--timeout",
       "--contimeout",
+      "--stats",
+      "--stats-file-name-length",
       "--log-level",
       "--dump",
     ]);
@@ -2671,18 +3059,24 @@
       return `${day} ${monthLabel} ${hours}:${minutes}`;
     }
 
-    function formatRunTimestamp(value) {
+    function formatRunTimestamp(value, options = {}) {
       const raw = String(value || "").trim();
       if (!raw) return "";
       const parsed = new Date(raw);
       if (Number.isNaN(parsed.getTime())) return raw;
+      const showSeconds = options.seconds !== false;
       const monthLabels = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
       const monthLabel = monthLabels[parsed.getMonth()];
       const day = String(parsed.getDate()).padStart(2, "0");
       const hours = String(parsed.getHours()).padStart(2, "0");
       const minutes = String(parsed.getMinutes()).padStart(2, "0");
+      if (!showSeconds) return `${day} ${monthLabel} ${hours}:${minutes}`;
       const seconds = String(parsed.getSeconds()).padStart(2, "0");
       return `${day} ${monthLabel} ${hours}:${minutes}:${seconds}`;
+    }
+
+    function formatRunHistoryTimestamp(value) {
+      return formatRunTimestamp(value, { seconds: false });
     }
 
     function formatRunDisplayId(runId) {
@@ -2944,10 +3338,40 @@
     }
 
     function copyProgressPercent(item) {
+      if (isArchiveScanning(item)) return null;
+      const transferredBytes = parseDataSizeToBytes(item?.transferred);
+      const totalBytes = parseDataSizeToBytes(item?.total);
+      if (Number.isFinite(transferredBytes) && Number.isFinite(totalBytes) && totalBytes > 0) {
+        return Math.min(100, Math.max(0, (transferredBytes / totalBytes) * 100));
+      }
       const raw = Number(item?.percent);
       if (Number.isFinite(raw)) return Math.min(100, Math.max(0, raw));
       if (item?.status === "queued") return 0;
       return null;
+    }
+
+    function formatProgressPercent(percent) {
+      if (percent === null || !Number.isFinite(Number(percent))) return "...";
+      const safe = Math.min(100, Math.max(0, Number(percent)));
+      const digits = safe > 0 && safe < 99.95 && Math.abs(safe - Math.round(safe)) >= 0.05 ? 1 : 0;
+      return `${safe.toFixed(digits).replace(".", ",")}%`;
+    }
+
+    function formatCpuPercent(rawValue) {
+      const value = Number(rawValue);
+      if (!Number.isFinite(value)) return "";
+      const digits = value >= 100 ? 0 : 1;
+      return `${value.toFixed(digits).replace(".", ",")}%`;
+    }
+
+    function copyResourceSummary(item) {
+      const resources = item?.resources || {};
+      const parts = [];
+      const cpu = formatCpuPercent(resources.cpu_percent);
+      const rssBytes = Number(resources.rss_bytes);
+      if (cpu) parts.push(`CPU ${cpu}`);
+      if (Number.isFinite(rssBytes) && rssBytes > 0) parts.push(`RAM ${formatByteCount(rssBytes)}`);
+      return parts.join(" • ");
     }
 
     function parseDataSizeToBytes(rawValue) {
@@ -2989,6 +3413,113 @@
       }
       const digits = megabytes >= 100 ? 0 : 2;
       return `${megabytes.toFixed(digits).replace(".", ",")} МБ`;
+    }
+
+    function formatByteCount(rawValue) {
+      const bytes = Number(rawValue);
+      if (!Number.isFinite(bytes)) return "";
+      if (bytes < 1000) return `${Math.max(0, Math.round(bytes))} Б`;
+      const units = ["КБ", "МБ", "ГБ", "ТБ", "ПБ"];
+      let value = Math.max(0, bytes) / 1000;
+      let unitIndex = 0;
+      while (value >= 1000 && unitIndex < units.length - 1) {
+        value /= 1000;
+        unitIndex += 1;
+      }
+      const digits = value >= 100 ? 0 : 2;
+      return `${value.toFixed(digits).replace(".", ",")} ${units[unitIndex]}`;
+    }
+
+    function formatRunTransferStats(item) {
+      const parts = [];
+      const transferred = Number(item?.transferred_bytes);
+      const total = Number(item?.total_bytes);
+      const files = Number(item?.file_count);
+      const fileTotal = Number(item?.file_total);
+      if (Number.isFinite(transferred) && Number.isFinite(total) && total > 0) {
+        parts.push(`${formatByteCount(transferred)} из ${formatByteCount(total)}`);
+      } else if (Number.isFinite(transferred)) {
+        parts.push(formatByteCount(transferred));
+      }
+      if (Number.isFinite(files) && Number.isFinite(fileTotal) && fileTotal > 0) {
+        parts.push(`${files}/${fileTotal} файлов`);
+      } else if (Number.isFinite(files)) {
+        parts.push(`${files} файлов`);
+      }
+      return parts.join(" • ");
+    }
+
+    function formatCompactByteParts(rawValue) {
+      const bytes = Number(rawValue);
+      if (!Number.isFinite(bytes)) return null;
+      const safe = Math.max(0, bytes);
+      if (safe < 1000) return { value: String(Math.round(safe)), unit: "Б" };
+      const units = ["КБ", "МБ", "ГБ", "ТБ", "ПБ"];
+      let value = safe / 1000;
+      let unitIndex = 0;
+      while (value >= 1000 && unitIndex < units.length - 1) {
+        value /= 1000;
+        unitIndex += 1;
+      }
+      const digits = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+      return { value: value.toFixed(digits).replace(".", ","), unit: units[unitIndex] };
+    }
+
+    function formatCompactByteCount(rawValue) {
+      const parts = formatCompactByteParts(rawValue);
+      return parts ? `${parts.value} ${parts.unit}` : "";
+    }
+
+    function formatCompactBytePair(transferred, total) {
+      const left = formatCompactByteParts(transferred);
+      const right = formatCompactByteParts(total);
+      if (!left && !right) return "";
+      if (!right) return left ? `${left.value} ${left.unit}` : "";
+      if (!left) return `${right.value} ${right.unit}`;
+      if (left.unit === right.unit) return `${left.value}/${right.value} ${right.unit}`;
+      return `${left.value} ${left.unit}/${right.value} ${right.unit}`;
+    }
+
+    function formatCompactNumber(rawValue) {
+      const value = Number(rawValue);
+      if (!Number.isFinite(value)) return "";
+      const safe = Math.max(0, value);
+      if (safe >= 1_000_000) {
+        const amount = safe / 1_000_000;
+        const digits = amount >= 10 ? 0 : 1;
+        return `${amount.toFixed(digits).replace(".", ",")} млн`;
+      }
+      if (safe >= 10_000) {
+        const amount = safe / 1000;
+        const digits = amount >= 100 ? 0 : 1;
+        return `${amount.toFixed(digits).replace(".", ",")} тыс.`;
+      }
+      return String(Math.round(safe));
+    }
+
+    function formatRunTransferStatsCompact(item) {
+      const transferred = Number(item?.transferred_bytes);
+      const total = Number(item?.total_bytes);
+      const files = Number(item?.file_count);
+      const fileTotal = Number(item?.file_total);
+      const hasTransferred = Number.isFinite(transferred);
+      const hasTotal = Number.isFinite(total) && total > 0;
+      const hasFiles = Number.isFinite(files);
+      const hasFileTotal = Number.isFinite(fileTotal) && fileTotal > 0;
+      const zeroKnown = (!hasTransferred || transferred === 0) && (!hasFiles || files === 0) && !hasTotal && !hasFileTotal;
+      if (zeroKnown && (hasTransferred || hasFiles)) return "";
+      const parts = [];
+      if (hasTransferred || hasTotal) {
+        parts.push(hasTotal ? formatCompactBytePair(transferred || 0, total) : formatCompactByteCount(transferred));
+      }
+      if (hasFiles || hasFileTotal) {
+        if (hasFileTotal) {
+          parts.push(`${formatCompactNumber(files || 0)}/${formatCompactNumber(fileTotal)} ф.`);
+        } else {
+          parts.push(`${formatCompactNumber(files)} ф.`);
+        }
+      }
+      return parts.filter(Boolean).join(" · ");
     }
 
     function formatMegabitsPerSecond(rawValue) {
@@ -3040,6 +3571,76 @@
       return `${hours}:${minutes}:${seconds}`;
     }
 
+    function isArchiveScanning(item) {
+      return item?.phase === "archive" && String(item?.activity || "").toLowerCase().includes("scan");
+    }
+
+    function archiveCurrentFromRawLine(rawLine) {
+      const raw = String(rawLine || "").trim();
+      if (!raw) return "";
+      const prefixed = raw.match(/^7z:\s+(?:Compressing|Scanning|Updating)\s+\d{1,3}%\s+(.+)$/i);
+      let current = prefixed ? prefixed[1] : "";
+      if (!current) {
+        const native = raw.match(/^\d{1,3}%\s+(.+)$/);
+        current = native ? native[1] : "";
+      }
+      return current
+        .replace(/^\d+\s+/, "")
+        .replace(/^[+\-U]\s+/, "")
+        .replace(/^(?:Scan|Scanning|Compressing|Updating)\s+/i, "")
+        .trim();
+    }
+
+    function compactArchivePath(rawPath) {
+      const value = String(rawPath || "").trim();
+      if (!value) return "";
+      if (value.length <= 64) return value;
+      const parts = value.split("/").filter(Boolean);
+      if (parts.length >= 3) {
+        const compact = `.../${parts.slice(-3).join("/")}`;
+        return compact.length <= 72 ? compact : `.../${compact.slice(-69)}`;
+      }
+      return `...${value.slice(-61)}`;
+    }
+
+    function currentTransferFromRawLine(rawLine) {
+      const raw = String(rawLine || "").trim();
+      const match = raw.match(/^\*\s+(.+?):\s*\d{1,3}%\s*\//);
+      return match ? match[1].trim() : "";
+    }
+
+    function archiveProgressSummary(item) {
+      const activity = String(item?.activity || "").toLowerCase();
+      const label = activity.includes("scan")
+        ? "Сканирование 7z"
+        : activity.includes("updat")
+          ? "Обновление 7z"
+          : "Сжатие 7z";
+      const current = compactArchivePath(item?.current || archiveCurrentFromRawLine(item?.raw_line));
+      return current ? `${label}: ${current}` : label;
+    }
+
+    function transferFileCounter(item) {
+      const count = Number(item?.file_count);
+      const total = Number(item?.file_total);
+      if (Number.isFinite(count) && Number.isFinite(total) && total > 0) {
+        return `файлов ${formatCompactNumber(count)}/${formatCompactNumber(total)}`;
+      }
+      if (Number.isFinite(count)) return `файлов ${formatCompactNumber(count)}`;
+      return "";
+    }
+
+    function transferCurrentSummary(item) {
+      const current = compactArchivePath(item?.current || currentTransferFromRawLine(item?.raw_line));
+      if (!current) return "";
+      const currentPercent = Number(item?.current_percent);
+      const currentTotal = String(item?.current_total || "").trim();
+      const details = [];
+      if (Number.isFinite(currentPercent)) details.push(`${currentPercent}%`);
+      if (currentTotal) details.push(formatDataAmount(currentTotal));
+      return `Файл: ${current}${details.length ? ` (${details.join(" / ")})` : ""}`;
+    }
+
     function copyProgressSummary(item) {
       const parts = [];
       if (item?.transferred && item?.total) {
@@ -3050,8 +3651,16 @@
         parts.push("Ожидает запуска");
       } else if (item?.status === "paused") {
         parts.push("Пауза");
+      } else if (item?.phase === "archive") {
+        parts.push(archiveProgressSummary(item));
       } else {
         parts.push("Ожидание статистики rclone");
+      }
+      if (item?.phase === "transfer") {
+        const counter = transferFileCounter(item);
+        const current = transferCurrentSummary(item);
+        if (counter) parts.push(counter);
+        if (current) parts.push(current);
       }
       if (item?.speed) parts.push(formatMegabitsPerSecond(item.speed));
       if (item?.eta) parts.push(`До завершения: ${formatEtaValue(item.eta)}`);
@@ -3090,8 +3699,9 @@
         const statusLabel = item.status === "paused" ? "paused" : (item.status === "running" ? "running" : "queued");
         const subtitle = [`run #${formatRunDisplayId(item.run_id)}`, item.profile, item.transfer_mode].filter(Boolean).join(" • ");
         const meta = copyProgressSummary(item);
+        const resourceSummary = copyResourceSummary(item);
         const antiBotDelay = item.delayed_by_antibot ? antiBotDelayLabel(state.lastSnapshot?.next_copy_start_at) : "";
-        const progressValue = percent === null ? "..." : `${percent}%`;
+        const progressValue = formatProgressPercent(percent);
         const logButtonActive = item.log_step_id && Number(item.log_step_id) === Number(state.selectedRcloneLogStepId);
         return `
           <article class="copy-progress-item">
@@ -3104,6 +3714,7 @@
             </div>
             <div class="copy-progress-bar">
               <div class="${fillClass}" ${fillStyle}></div>
+              ${resourceSummary ? `<div class="copy-progress-resource">${escapeHtml(resourceSummary)}</div>` : ""}
             </div>
             <div class="copy-progress-meta">
               <span>
@@ -3153,6 +3764,7 @@
       const hasVisibleRightPanel = [...rightColumnPanels].some((panel) => !panel.hidden);
       const shouldPlaceRight = !hasVisibleRightPanel;
       const target = shouldPlaceRight ? rightSlot : leftSlot;
+      runsPanel.dataset.runsSlot = shouldPlaceRight ? "right" : "left";
       if (runsPanel.parentElement !== target) {
         target.appendChild(runsPanel);
       }
@@ -4739,33 +5351,186 @@
     function runHistorySummary(run) {
       const failureReason = String(run?.failure_reason || "").trim();
       if (String(run?.status || "") === "failed" && failureReason) return failureReason;
-      return String(run?.summary || "").trim();
+      const summary = String(run?.summary || "")
+        .replace(/\bcompleted=\d+\/\d+;?\s*/gi, "")
+        .replace(/\berrors=\d+;?\s*/gi, "")
+        .trim();
+      const labels = {
+        "recovered after service restart; unfinished steps marked stopped": "Остановлено после перезапуска сервиса; незавершённые шаги закрыты",
+        "stopped from dashboard before start": "Остановлено из панели до запуска",
+        "stopped before start": "Остановлено до запуска",
+      };
+      return labels[summary] || summary;
     }
 
     function runHistorySummaryTooltip(run) {
       const failureReason = String(run?.failure_reason || "").trim();
-      const summary = String(run?.summary || "").trim();
+      const summary = runHistorySummary(run);
+      const stats = formatRunTransferStats(run);
       const parts = [];
+      const errors = Number(run?.error_count);
+      const completed = Number(run?.completed_steps);
+      const total = Number(run?.total_steps);
+      if (Number.isFinite(completed) && Number.isFinite(total) && total > 0) {
+        parts.push(`completed=${completed}/${total}`);
+      }
+      if (Number.isFinite(errors)) parts.push(`errors=${errors}`);
+      parts.push(`Триггер: ${formatTriggerLabel(run)}`);
+      if (stats) parts.push(`Статистика: ${stats}`);
       if (failureReason) parts.push(`Причина: ${failureReason}`);
       if (summary && summary !== failureReason) parts.push(`Сводка: ${summary}`);
-      return parts.join(" ");
+      if (run?.log_step_id) parts.push("Лог: доступен");
+      return parts.join("\n");
+    }
+
+    function openRunSummaryLog(event, stepId) {
+      event?.preventDefault();
+      event?.stopPropagation();
+      hideRunsHistoryTooltip();
+      openRcloneLog(stepId);
+    }
+
+    function handleRunSummaryLogKeydown(event, stepId) {
+      if (!["Enter", " "].includes(event?.key)) return;
+      openRunSummaryLog(event, stepId);
+    }
+
+    function runHistoryUsesTiles() {
+      return RUNS_HISTORY_LAYOUT !== "table";
+    }
+
+    function applyRunsHistoryLayoutMode() {
+      const tiles = document.getElementById("runsTiles");
+      const table = document.getElementById("runsTable");
+      const panel = document.getElementById("runsPanel");
+      const useTiles = runHistoryUsesTiles();
+      if (tiles) tiles.hidden = !useTiles;
+      if (table) table.hidden = useTiles;
+      if (panel) panel.dataset.runsLayout = useTiles ? "tiles" : "table";
+      return useTiles;
+    }
+
+    function formatRunStatusLabel(status) {
+      const labels = {
+        succeeded: "успех",
+        failed: "ошибка",
+        stopped: "стоп",
+        running: "идёт",
+        queued: "очередь",
+        paused: "пауза",
+      };
+      const raw = String(status || "").trim();
+      return labels[raw] || raw || "—";
+    }
+
+    function runHistorySummaryLabel(run) {
+      return runHistorySummary(run) || formatRunTransferStatsCompact(run) || "";
+    }
+
+    function runHistoryTriggerTagLabel(run) {
+      const triggerType = String(run?.trigger_type || "").trim().toLowerCase();
+      if (!triggerType || triggerType === "schedule") return "";
+      const label = formatTriggerLabel(run);
+      return label && label !== "—" ? label : "";
+    }
+
+    function runHistoryLogStepId(run) {
+      const logStepId = Number(run?.log_step_id);
+      return Number.isFinite(logStepId) && logStepId > 0 ? logStepId : null;
+    }
+
+    function runHistoryTileViewModel(run) {
+      const logStepId = runHistoryLogStepId(run);
+      return {
+        // Data sources for the run strip:
+        id: run?.id,
+        displayId: formatRunDisplayId(run?.id),
+        status: String(run?.status || ""),
+        statusLabel: formatRunStatusLabel(run?.status),
+        jobKey: run?.job_key || "—",
+        requestedAt: formatRunHistoryTimestamp(run?.requested_at),
+        summary: runHistorySummaryLabel(run),
+        triggerLabel: runHistoryTriggerTagLabel(run),
+        tooltip: runHistorySummaryTooltip(run),
+        logStepId,
+        tone: statusClass(run?.status) || "neutral",
+        logActive: logStepId && Number(logStepId) === Number(state.selectedRcloneLogStepId),
+      };
+    }
+
+    function renderRunsAsTable(runs) {
+      const body = document.getElementById("runsBody");
+      const tiles = document.getElementById("runsTiles");
+      if (tiles) tiles.innerHTML = "";
+      if (!body) return;
+      if (!runs.length) {
+        body.innerHTML = '<tr><td colspan="5" class="empty">История запусков пока пуста.</td></tr>';
+        return;
+      }
+      body.innerHTML = runs.map((run) => {
+        const tooltip = runHistorySummaryTooltip(run);
+        const stats = formatRunTransferStatsCompact(run);
+        const logStepId = runHistoryLogStepId(run);
+        const statusAttrs = logStepId
+          ? ` class="${statusClass(run.status)} run-status-log-cell" role="button" tabindex="0" title="Открыть лог" onclick="openRunSummaryLog(event, ${logStepId})" onkeydown="handleRunSummaryLogKeydown(event, ${logStepId})"`
+          : "";
+        return `
+        <tr class="ui-tooltip${tooltip ? " has-tooltip" : ""}"${tooltip ? ` data-tooltip="${escapeHtml(tooltip)}" tabindex="0"` : ""}>
+          <td><button type="button" class="run-link" onclick="showRunDetails(${run.id})">${escapeHtml(formatRunDisplayId(run.id))}</button></td>
+          <td${statusAttrs || ` class="${statusClass(run.status)}"`}>${escapeHtml(String(run.status || ""))}</td>
+          <td>${escapeHtml(run.job_key || "—")}</td>
+          <td>${escapeHtml(formatRunHistoryTimestamp(run.requested_at))}</td>
+          <td>
+            <div class="run-summary-cell">
+              ${stats ? `<span class="run-transfer-pill">${escapeHtml(stats)}</span>` : ""}
+            </div>
+          </td>
+        </tr>
+      `;
+      }).join("");
+    }
+
+    function renderRunsAsTiles(runs) {
+      const tiles = document.getElementById("runsTiles");
+      const body = document.getElementById("runsBody");
+      if (body) body.innerHTML = "";
+      if (!tiles) return;
+      if (!runs.length) {
+        tiles.innerHTML = '<div class="empty">История запусков пока пуста.</div>';
+        return;
+      }
+      tiles.innerHTML = runs.map((run) => {
+        const item = runHistoryTileViewModel(run);
+        const statusMarkup = `<span class="run-tile-status ${item.tone}">${escapeHtml(item.statusLabel)}</span>`;
+        const logMarkup = item.logStepId
+          ? `<button type="button" class="run-tile-pill run-tile-log${item.logActive ? " is-active" : ""}" title="Открыть лог" onclick="openRunSummaryLog(event, ${item.logStepId})"><span class="run-tile-pill-value">лог</span></button>`
+          : "";
+        const triggerMarkup = item.triggerLabel
+          ? `<span class="run-tile-pill run-tile-trigger" title="Запуск: ${escapeHtml(item.triggerLabel)}"><span class="run-tile-pill-value">${escapeHtml(item.triggerLabel)}</span></span>`
+          : "";
+        return `
+        <article class="run-tile tone-${item.tone} ui-tooltip${item.tooltip ? " has-tooltip" : ""}" role="listitem"${item.tooltip ? ` data-tooltip="${escapeHtml(item.tooltip)}" tabindex="0"` : ""}>
+          <button type="button" class="run-link run-tile-date" onclick="showRunDetails(${item.id})"><span class="run-tile-date-value">${escapeHtml(item.requestedAt)}</span></button>
+          <span class="run-tile-main">
+            <span class="run-tile-pill run-tile-job" title="${escapeHtml(item.jobKey)}"><span class="run-tile-pill-value">${escapeHtml(item.jobKey)}</span></span>
+            ${item.summary ? `<span class="run-tile-pill run-tile-transfer" title="${escapeHtml(item.summary)}"><span class="run-tile-pill-value">${escapeHtml(item.summary)}</span></span>` : ""}
+            ${logMarkup}
+            ${triggerMarkup}
+          </span>
+          ${statusMarkup}
+        </article>
+      `;
+      }).join("");
     }
 
     function renderRuns(runs) {
       hideRunsHistoryTooltip();
-      document.getElementById("runsBody").innerHTML = runs.map((run) => `
-        <tr>
-          <td><button type="button" class="run-link" onclick="showRunDetails(${run.id})">${escapeHtml(formatRunDisplayId(run.id))}</button></td>
-          <td class="${statusClass(run.status)}">${run.status}</td>
-          <td>${escapeHtml(run.job_key || "—")}</td>
-          <td>${escapeHtml(formatTriggerLabel(run))}</td>
-          <td>${formatRunTimestamp(run.requested_at)}</td>
-          <td class="ui-tooltip${runHistorySummaryTooltip(run) ? " has-tooltip" : ""}"${runHistorySummaryTooltip(run) ? ` data-tooltip="${escapeHtml(runHistorySummaryTooltip(run))}" tabindex="0"` : ""}>
-            <span>${escapeHtml(runHistorySummary(run))}</span>
-            ${run.log_step_id ? `<button type="button" class="run-link log-open-link" onclick="openRcloneLog(${run.log_step_id})">лог</button>` : ""}
-          </td>
-        </tr>
-      `).join("");
+      const safeRuns = Array.isArray(runs) ? runs : [];
+      if (applyRunsHistoryLayoutMode()) {
+        renderRunsAsTiles(safeRuns);
+      } else {
+        renderRunsAsTable(safeRuns);
+      }
     }
 
     function ensureRunsHistoryTooltip() {
@@ -4782,40 +5547,53 @@
 
     function hideRunsHistoryTooltip() {
       activeRunsTooltipTarget = null;
+      activeRunsTooltipPointer = null;
       const tooltip = document.getElementById("runsHistoryTooltip");
       if (!tooltip) return;
       tooltip.hidden = true;
       tooltip.textContent = "";
       tooltip.dataset.placement = "top";
+      tooltip.style.removeProperty("--tooltip-arrow-x");
     }
 
-    function positionRunsHistoryTooltip(target) {
+    function pointerFromEvent(event) {
+      if (!event || typeof event.clientX !== "number" || typeof event.clientY !== "number") return null;
+      return { x: event.clientX, y: event.clientY };
+    }
+
+    function positionRunsHistoryTooltip(target, pointer = activeRunsTooltipPointer) {
       const tooltip = ensureRunsHistoryTooltip();
       if (tooltip.hidden) return;
       const margin = 12;
+      const gap = 14;
       const rect = target.getBoundingClientRect();
       const tooltipRect = tooltip.getBoundingClientRect();
-      let top = rect.top - tooltipRect.height - 10;
+      const anchorX = pointer?.x ?? (rect.left + (rect.width / 2));
+      const anchorY = pointer?.y ?? (rect.top + (rect.height / 2));
+      let top = anchorY - tooltipRect.height - gap;
       let placement = "top";
       if (top < margin) {
-        top = rect.bottom + 10;
+        top = anchorY + gap;
         placement = "bottom";
       }
       top = Math.max(margin, Math.min(top, window.innerHeight - tooltipRect.height - margin));
-      let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+      let left = anchorX - (tooltipRect.width / 2);
       left = Math.max(margin, Math.min(left, window.innerWidth - tooltipRect.width - margin));
+      const arrowX = Math.max(12, Math.min(anchorX - left, tooltipRect.width - 12));
       tooltip.style.top = `${top}px`;
       tooltip.style.left = `${left}px`;
+      tooltip.style.setProperty("--tooltip-arrow-x", `${arrowX}px`);
       tooltip.dataset.placement = placement;
     }
 
-    function showRunsHistoryTooltip(target) {
+    function showRunsHistoryTooltip(target, event = null) {
       const text = String(target?.getAttribute("data-tooltip") || "").trim();
       if (!text) {
         hideRunsHistoryTooltip();
         return;
       }
       activeRunsTooltipTarget = target;
+      activeRunsTooltipPointer = pointerFromEvent(event);
       const tooltip = ensureRunsHistoryTooltip();
       tooltip.textContent = text;
       tooltip.hidden = false;
@@ -4838,7 +5616,13 @@
       runsPanel.addEventListener("mouseover", (event) => {
         const target = event.target.closest(".ui-tooltip.has-tooltip");
         if (!target || !runsPanel.contains(target)) return;
-        showRunsHistoryTooltip(target);
+        showRunsHistoryTooltip(target, event);
+      });
+      runsPanel.addEventListener("mousemove", (event) => {
+        const target = event.target.closest(".ui-tooltip.has-tooltip");
+        if (!target || !runsPanel.contains(target) || target !== activeRunsTooltipTarget) return;
+        activeRunsTooltipPointer = pointerFromEvent(event);
+        positionRunsHistoryTooltip(target);
       });
       runsPanel.addEventListener("mouseout", (event) => {
         const target = event.target.closest(".ui-tooltip.has-tooltip");
@@ -4878,6 +5662,19 @@
     function commandPreview(job) {
       if (job.kind === "command") {
         return (job.command || []).join(" ");
+      }
+      if (job.archive?.enabled) {
+        const archive = job.archive || {};
+        const args = [
+          "python3", "-m", "app.archive_job",
+          "--source", job.source_path || "",
+          "--destination", job.destination_path || "",
+          "--filename-template", archive.filename_template || "{key}-{date}.7z",
+          "--date-format", archive.date_format || "%Y-%m-%d_%H-%M-%S",
+          "--compression-level", String(archive.compression_level ?? 5),
+        ];
+        if (archive.temp_dir) args.push("--temp-dir", archive.temp_dir);
+        return args.join(" ");
       }
       const args = normalizePreviewSingletonFlags([
         ...defaultRcloneArgs,
@@ -5445,6 +6242,30 @@
       };
     }
 
+    function collectArchiveSettings(kind) {
+      const enabled = kind === "backup" ? isTogglePressed("archiveEnabled") : false;
+      const level = normalizeOptionalInteger(formValue("archiveCompressionLevel"), 0);
+      return {
+        enabled,
+        filename_template: formValue("archiveFilenameTemplate") || "{key}-{date}.7z",
+        date_format: formValue("archiveDateFormat") || "%Y-%m-%d_%H-%M-%S",
+        compression_level: Math.min(9, level ?? 5),
+        temp_dir: formValue("archiveTempDir") || null,
+        password: formValue("archivePassword") || null,
+        encrypt_headers: enabled && Boolean(formValue("archivePassword")) ? isTogglePressed("archiveEncryptHeaders") : false,
+      };
+    }
+
+    function fillArchiveSettings(archive = {}) {
+      setTogglePressed("archiveEnabled", archive.enabled ?? false);
+      document.getElementById("archiveFilenameTemplate").value = archive.filename_template || "{key}-{date}.7z";
+      document.getElementById("archiveDateFormat").value = archive.date_format || "%Y-%m-%d_%H-%M-%S";
+      document.getElementById("archiveCompressionLevel").value = archive.compression_level ?? 5;
+      document.getElementById("archiveTempDir").value = archive.temp_dir || "";
+      document.getElementById("archivePassword").value = archive.password || "";
+      setTogglePressed("archiveEncryptHeaders", archive.encrypt_headers ?? false);
+    }
+
     function fillJobRcloneOptions(options = {}) {
       document.getElementById("maxAge").value = options.max_age || "";
       document.getElementById("minAge").value = options.min_age || "";
@@ -5740,6 +6561,7 @@
         },
         options: collectJobRcloneOptions(kind),
         retention: collectRetentionRcloneOptions(kind),
+        archive: collectArchiveSettings(kind),
         notifications: {
           on_success: isTogglePressed("jobNotifySuccess"),
           on_failure: isTogglePressed("jobNotifyFailure"),
@@ -5820,6 +6642,7 @@
         input.checked = Boolean(job?.schedule?.weekdays?.includes(Number(input.value)));
       });
       fillJobRcloneOptions(job?.options || {});
+      fillArchiveSettings(job?.archive || {});
       setTogglePressed("jobWatcherEnabled", job?.watcher_enabled ?? false);
       fillRetentionRcloneOptions(job?.retention || {});
       setTogglePressed("jobNotifySuccess", job?.notifications?.on_success ?? false);
@@ -5850,6 +6673,13 @@
       document.getElementById("scheduleHour").value = 3;
       document.getElementById("scheduleMinute").value = 0;
       setTogglePressed("jobWatcherEnabled", false);
+      setTogglePressed("archiveEnabled", false);
+      document.getElementById("archiveFilenameTemplate").value = "{key}-{date}.7z";
+      document.getElementById("archiveDateFormat").value = "%Y-%m-%d_%H-%M-%S";
+      document.getElementById("archiveCompressionLevel").value = 5;
+      document.getElementById("archiveTempDir").value = "";
+      document.getElementById("archivePassword").value = "";
+      setTogglePressed("archiveEncryptHeaders", false);
       setTogglePressed("retentionEnabled", false);
       setTogglePressed("commandForceRcloneLog", false);
       document.getElementById("retentionMinAge").value = "";
@@ -6426,11 +7256,13 @@
     }
 
     function formatRunStepDetails(step) {
+      const stats = formatRunTransferStats(step);
       const lines = [
         `run step #${step.step_order} / ${step.job_key}`,
         `status: ${step.status}`,
         `kind: ${step.step_kind}`,
         `description: ${step.description || "-"}`,
+        `stats: ${stats || "-"}`,
         `exit_code: ${step.exit_code ?? "n/a"}`,
         `duration: ${typeof step.duration_seconds === "number" ? `${step.duration_seconds.toFixed(2)}s` : "n/a"}`,
         `started_at: ${step.started_at || "-"}`,
@@ -6523,11 +7355,22 @@
 
     function updateBrowseChrome() {
       const excludeMode = state.browseTarget === "exclude";
-      document.getElementById("browseTitle").textContent = excludeMode ? "Выбор исключения" : "Выбор каталога";
-      document.getElementById("browseChooseButton").textContent = excludeMode ? "Добавить текущую папку" : "Выбрать текущую папку";
+      const cloudMode = state.browseTarget === "cloud";
+      document.getElementById("browseTitle").textContent = excludeMode
+        ? "Выбор исключения"
+        : cloudMode
+          ? "Выбор папки в облаке"
+          : "Выбор каталога";
+      document.getElementById("browseChooseButton").textContent = excludeMode
+        ? "Добавить текущую папку"
+        : cloudMode
+          ? "Выбрать текущую папку в облаке"
+          : "Выбрать текущую папку";
       document.getElementById("browseToolbarHint").textContent = excludeMode
         ? "Стрелки: перемещение, Enter: открыть или добавить файл, Space: добавить."
-        : "Стрелки: перемещение, Enter: открыть, Space: выбрать.";
+        : cloudMode
+          ? "Стрелки: перемещение по папкам облака, Enter: открыть, Space: выбрать."
+          : "Стрелки: перемещение, Enter: открыть, Space: выбрать.";
     }
 
     async function openBrowser(target) {
@@ -6535,11 +7378,15 @@
         setToast("Сначала укажите исходный каталог задачи.", "error");
         return;
       }
+      if (target === "cloud" && !formValue("jobCloud")) {
+        setToast("Сначала выберите облако.", "error");
+        return;
+      }
       state.browseTarget = target;
       updateBrowseChrome();
       document.getElementById("browseModal").hidden = false;
       document.body.style.overflow = "hidden";
-      await browse(target === "exclude" ? formValue("jobSource") : null);
+      await browse(target === "exclude" ? formValue("jobSource") : (target === "cloud" ? formValue("jobDestinationSubpath") : null));
       document.getElementById("browsePanel").focus();
     }
 
@@ -6561,8 +7408,8 @@
     }
 
     function chooseCurrentDirectory() {
-      if (state.browseCurrentPath) {
-        selectBrowseEntry({ path: state.browseCurrentPath, type: "directory" });
+      if (state.browseCurrentPath || state.browseTarget === "cloud") {
+        selectBrowseEntry({ path: state.browseCurrentPath || "", type: "directory" });
       }
     }
 
@@ -6629,16 +7476,20 @@
     async function browse(path) {
       try {
         const includeFiles = state.browseTarget === "exclude";
+        const cloudMode = state.browseTarget === "cloud";
         const query = new URLSearchParams();
+        if (cloudMode) query.set("cloud_key", formValue("jobCloud"));
         if (path) query.set("path", path);
         if (includeFiles) query.set("include_files", "true");
-        const url = `/api/fs/browse${query.size ? `?${query.toString()}` : ""}`;
+        const url = cloudMode
+          ? `/api/clouds/browse?${query.toString()}`
+          : `/api/fs/browse${query.size ? `?${query.toString()}` : ""}`;
         const response = await fetch(url);
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || "browse failed");
         state.browseCurrentPath = payload.path || "";
         state.browseParent = payload.parent || null;
-        document.getElementById("browsePath").textContent = payload.path || "Корневые директории";
+        document.getElementById("browsePath").textContent = payload.path || (cloudMode ? payload.remote_path || "Корень облака" : "Корневые директории");
         const entries = [];
         if (payload.parent) {
           entries.push({
@@ -6654,7 +7505,7 @@
             type: "directory",
             path: dir.path,
             label: dir.name,
-            kind: "каталог",
+            kind: cloudMode ? "папка облака" : "каталог",
             hint: "открыть или выбрать",
           });
         });
@@ -6670,7 +7521,7 @@
         state.browseEntries = entries;
         state.browseSelectedIndex = 0;
         document.getElementById("browseUpButton").disabled = !payload.parent;
-        document.getElementById("browseChooseButton").disabled = !state.browseCurrentPath;
+        document.getElementById("browseChooseButton").disabled = !state.browseCurrentPath && !cloudMode;
         renderBrowseList();
       } catch (error) {
         setToast(error.message || "Ошибка browse", "error");
@@ -6680,6 +7531,8 @@
     function selectBrowseEntry(entry) {
       if (state.browseTarget === "source") {
         document.getElementById("jobSource").value = entry.path.endsWith("/") ? entry.path : `${entry.path}/`;
+      } else if (state.browseTarget === "cloud") {
+        document.getElementById("jobDestinationSubpath").value = entry.path ? (entry.path.endsWith("/") ? entry.path : `${entry.path}/`) : "";
       } else if (state.browseTarget === "exclude") {
         if (!addExcludePathEntry(entry.path, entry.type === "file" ? "file" : "directory")) {
           return;
@@ -6690,7 +7543,9 @@
       setToast(
         state.browseTarget === "exclude"
           ? `Добавлено исключение: ${entry.path}`
-          : `Выбран каталог ${entry.path}`,
+          : state.browseTarget === "cloud"
+            ? `Выбрана папка облака ${entry.path || "/"}`
+            : `Выбран каталог ${entry.path}`,
         "ok"
       );
     }
@@ -6804,7 +7659,7 @@
       state.keyEditedManually = Boolean(event.target.value.trim());
     });
 
-    ["jobSource", "jobDestination", "jobDestinationSubpath", "maxAge", "minAge", "jobTransfers", "jobCheckers", "jobTpslimit", "jobTpslimitBurst", "jobRetries", "jobLowLevelRetries", "jobRetriesSleep", "excludeList", "extraArgs", "retentionMinAge", "retentionTransfers", "retentionCheckers", "retentionTpslimit", "retentionTpslimitBurst", "retentionRetries", "retentionLowLevelRetries", "retentionRetriesSleep", "retentionExcludeList", "retentionExtraArgs", "jobNotifyPriority", "jobNotifyTitle", "commandList"].forEach((id) => {
+    ["jobSource", "jobDestination", "jobDestinationSubpath", "maxAge", "minAge", "jobTransfers", "jobCheckers", "jobTpslimit", "jobTpslimitBurst", "jobRetries", "jobLowLevelRetries", "jobRetriesSleep", "excludeList", "extraArgs", "archiveFilenameTemplate", "archiveDateFormat", "archiveCompressionLevel", "archiveTempDir", "archivePassword", "retentionMinAge", "retentionTransfers", "retentionCheckers", "retentionTpslimit", "retentionTpslimitBurst", "retentionRetries", "retentionLowLevelRetries", "retentionRetriesSleep", "retentionExcludeList", "retentionExtraArgs", "jobNotifyPriority", "jobNotifyTitle", "commandList"].forEach((id) => {
       document.getElementById(id).addEventListener("input", () => collectFormJob());
     });
     document.getElementById("excludePathInput").addEventListener("keydown", (event) => {
@@ -6853,7 +7708,7 @@
       updateLoggingPanelHeight();
     });
 
-    ["retentionEnabled", "jobNotifySuccess", "jobNotifyFailure", "jobWatcherEnabled", "jobMailruSafePreset", "jobFastList", "jobNoTraverse", "jobForceRcloneLog", "commandForceRcloneLog", "retentionMailruSafePreset", "retentionFastList", "retentionNoTraverse"].forEach((id) => {
+    ["retentionEnabled", "archiveEnabled", "archiveEncryptHeaders", "jobNotifySuccess", "jobNotifyFailure", "jobWatcherEnabled", "jobMailruSafePreset", "jobFastList", "jobNoTraverse", "jobForceRcloneLog", "commandForceRcloneLog", "retentionMailruSafePreset", "retentionFastList", "retentionNoTraverse"].forEach((id) => {
       bindToggleChip(id, () => collectFormJob());
     });
 

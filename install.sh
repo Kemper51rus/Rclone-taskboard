@@ -8,8 +8,10 @@ SOURCE_ROOT="${SOURCE_ROOT:-}"
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 SERVICE_NAME="${SERVICE_NAME:-rclone-taskboard.service}"
+FRONTEND_SERVICE_NAME="${FRONTEND_SERVICE_NAME:-${SERVICE_NAME%.service}-frontend.service}"
+TASKBOARD_PUBLIC_PORT="${TASKBOARD_PUBLIC_PORT:-8080}"
+TASKBOARD_BACKEND_PORT="${TASKBOARD_BACKEND_PORT:-8081}"
 SOURCE_CHECKOUT_DEFAULT="${SOURCE_CHECKOUT_DEFAULT:-/opt/rclone-taskboard-src}"
-DOCKER_CONTAINER_NAME="${DOCKER_CONTAINER_NAME:-rclone-taskboard}"
 RCLONE_WEB_SERVICE_NAME="${RCLONE_WEB_SERVICE_NAME:-rclone-web.service}"
 RCLONE_WEB_ADDR="${RCLONE_WEB_ADDR:-:3000}"
 RCLONE_WEB_NO_AUTH="${RCLONE_WEB_NO_AUTH:-yes}"
@@ -124,7 +126,8 @@ first_local_ipv4() {
 
 print_access_summary() {
   local mode="$1"
-  local dashboard_port="8080"
+  local dashboard_port="$TASKBOARD_PUBLIC_PORT"
+  local backend_port="$TASKBOARD_BACKEND_PORT"
   local primary_ip dashboard_url rclone_url rclone_web_port
 
   primary_ip="$(first_local_ipv4)"
@@ -139,14 +142,23 @@ print_access_summary() {
   printf '%b\n' "${C_GREEN}${C_BOLD}Rclone taskboard установлен${C_RESET}"
   printf '%b\n' "${C_CYAN}Режим:${C_RESET} $mode"
   printf '%b\n' "${C_CYAN}Runtime:${C_RESET} $TARGET_ROOT"
-  printf '%b\n' "${C_CYAN}Сервис:${C_RESET} $SERVICE_NAME"
+  printf '%b\n' "${C_CYAN}Backend service:${C_RESET} $SERVICE_NAME"
+  printf '%b\n' "${C_CYAN}Frontend service:${C_RESET} $FRONTEND_SERVICE_NAME"
   printf '%b\n' "${C_CYAN}Taskboard LAN:${C_RESET} $dashboard_url"
+  printf '%b\n' "${C_CYAN}Backend API:${C_RESET} http://127.0.0.1:${backend_port}/api/health"
 
   if has_working_systemd && systemctl list-unit-files "$SERVICE_NAME" --no-legend >/dev/null 2>&1; then
     if systemctl is-active --quiet "$SERVICE_NAME"; then
-      printf '%b\n' "${C_GREEN}Systemd service active: yes${C_RESET}"
+      printf '%b\n' "${C_GREEN}Backend service active: yes${C_RESET}"
     else
-      printf '%b\n' "${C_YELLOW}Systemd service active: no${C_RESET}"
+      printf '%b\n' "${C_YELLOW}Backend service active: no${C_RESET}"
+    fi
+  fi
+  if has_working_systemd && systemctl list-unit-files "$FRONTEND_SERVICE_NAME" --no-legend >/dev/null 2>&1; then
+    if systemctl is-active --quiet "$FRONTEND_SERVICE_NAME"; then
+      printf '%b\n' "${C_GREEN}Frontend service active: yes${C_RESET}"
+    else
+      printf '%b\n' "${C_YELLOW}Frontend service active: no${C_RESET}"
     fi
   fi
 
@@ -405,7 +417,6 @@ package_for_command() {
     rclone) printf 'rclone\n' ;;
     python3) printf 'python3\n' ;;
     install) printf 'coreutils\n' ;;
-    docker) printf 'docker.io\n' ;;
     *) printf '%s\n' "$command_name" ;;
   esac
 }
@@ -502,10 +513,6 @@ ensure_dependencies() {
   local missing_packages=()
   local required_commands=(git install systemctl "$PYTHON_BIN" rclone curl)
 
-  if [[ "$mode" == "docker" ]]; then
-    required_commands=(git install docker curl rclone)
-  fi
-
   for command_name in "${required_commands[@]}"; do
     if ! command_exists "$command_name"; then
       missing_packages+=("$(package_for_command "$command_name")")
@@ -514,10 +521,6 @@ ensure_dependencies() {
 
   if [[ "$mode" == "systemd" ]] && command_exists "$PYTHON_BIN" && ! check_python_venv; then
     missing_packages+=(python3-venv)
-  fi
-
-  if [[ "$mode" == "docker" ]] && command_exists docker && ! docker compose version >/dev/null 2>&1 && ! command_exists docker-compose; then
-    missing_packages+=(docker-compose-plugin)
   fi
 
   if [[ "${#missing_packages[@]}" -eq 0 ]]; then
@@ -530,16 +533,6 @@ ensure_dependencies() {
     install_packages "${missing_packages[@]}"
   else
     die "Установка остановлена: не хватает зависимостей."
-  fi
-}
-
-docker_compose() {
-  if docker compose version >/dev/null 2>&1; then
-    docker compose "$@"
-  elif command_exists docker-compose; then
-    docker-compose "$@"
-  else
-    die "Не найден docker compose."
   fi
 }
 
@@ -580,6 +573,7 @@ prepare_source_checkout() {
   fi
 
   [[ -f "$SOURCE_ROOT/taskboard/backend/app/main.py" ]] || die "В $SOURCE_ROOT не найден taskboard/backend/app/main.py"
+  [[ -f "$SOURCE_ROOT/taskboard/frontend/static/dashboard.html" ]] || die "В $SOURCE_ROOT не найден taskboard/frontend/static/dashboard.html"
 }
 
 copy_runtime_bundle() {
@@ -598,10 +592,16 @@ copy_runtime_bundle() {
     "$target_root/taskboard" \
     "$target_root/taskboard/backend" \
     "$target_root/taskboard/backend/app" \
+    "$target_root/taskboard/frontend" \
     "$target_root/taskboard/data"
 
   cp -a "$source_root/taskboard/backend/app/." "$target_root/taskboard/backend/app/"
+  cp -a "$source_root/taskboard/frontend/." "$target_root/taskboard/frontend/"
+  rm -f \
+    "$target_root/taskboard/backend/app/dashboard.html" \
+    "$target_root/taskboard/backend/app/rclone-taskboard-logo.svg"
   find "$target_root/taskboard/backend/app" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -exec rm -rf {} +
+  find "$target_root/taskboard/frontend" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -exec rm -rf {} +
   if [[ -n "$preserved_jobs_file" ]]; then
     install -m 0644 "$preserved_jobs_file" "$target_jobs_file"
     rm -f "$preserved_jobs_file"
@@ -623,17 +623,16 @@ copy_runtime_bundle() {
     "$target_root/systemd/rclone-taskboard.service"
   rmdir "$target_root/scripts" 2>/dev/null || true
   rmdir "$target_root/systemd" 2>/dev/null || true
-  if [[ -f "$source_root/taskboard/backend/Dockerfile" ]]; then
-    install -m 0644 "$source_root/taskboard/backend/Dockerfile" "$target_root/taskboard/backend/Dockerfile"
-  fi
-  if [[ -f "$source_root/taskboard/docker-compose.yml" ]]; then
-    install -m 0644 "$source_root/taskboard/docker-compose.yml" "$target_root/taskboard/docker-compose.yml"
-  fi
-  if [[ -f "$source_root/taskboard/.env.docker.example" ]]; then
-    install -m 0644 "$source_root/taskboard/.env.docker.example" "$target_root/taskboard/.env.docker.example"
-  fi
+  rm -f \
+    "$target_root/taskboard/backend/Dockerfile" \
+    "$target_root/taskboard/frontend/Dockerfile" \
+    "$target_root/taskboard/docker-compose.yml" \
+    "$target_root/taskboard/.env.docker.example"
   if [[ -f "$source_root/taskboard/.env.systemd.example" ]]; then
     install -m 0644 "$source_root/taskboard/.env.systemd.example" "$target_root/taskboard/.env.systemd.example"
+  fi
+  if [[ -f "$source_root/taskboard/.env.frontend.example" ]]; then
+    install -m 0644 "$source_root/taskboard/.env.frontend.example" "$target_root/taskboard/.env.frontend.example"
   fi
 
 }
@@ -673,11 +672,21 @@ escape_sed_replacement() {
 install_systemd_unit() {
   local source_root="$1"
   local target_root="$2"
-  local escaped_target
+  local escaped_target backend_proxy_url
   escaped_target="$(escape_sed_replacement "$target_root")"
-  sed "s|/opt/rclone-taskboard|$escaped_target|g" \
+  backend_proxy_url="http://127.0.0.1:${TASKBOARD_BACKEND_PORT}"
+  sed \
+    -e "s|/opt/rclone-taskboard|$escaped_target|g" \
+    -e "s|TASKBOARD_BACKEND_PORT=8081|TASKBOARD_BACKEND_PORT=${TASKBOARD_BACKEND_PORT}|g" \
     "$source_root/rclone-taskboard.service" > "$target_root/rclone-taskboard.service"
+  sed \
+    -e "s|/opt/rclone-taskboard|$escaped_target|g" \
+    -e "s|rclone-taskboard.service|$SERVICE_NAME|g" \
+    -e "s|http://127.0.0.1:8081|$backend_proxy_url|g" \
+    -e "s|TASKBOARD_FRONTEND_PORT=8080|TASKBOARD_FRONTEND_PORT=${TASKBOARD_PUBLIC_PORT}|g" \
+    "$source_root/rclone-taskboard-frontend.service" > "$target_root/rclone-taskboard-frontend.service"
   install -m 0644 "$target_root/rclone-taskboard.service" "$SYSTEMD_DIR/$SERVICE_NAME"
+  install -m 0644 "$target_root/rclone-taskboard-frontend.service" "$SYSTEMD_DIR/$FRONTEND_SERVICE_NAME"
   systemctl daemon-reload
 }
 
@@ -766,7 +775,7 @@ install_or_update_systemd() {
   initialize_install_preferences
   need_root
   if ! has_working_systemd; then
-    die "Режим systemd недоступен: в этой системе нет рабочего systemd (PID 1). Используйте Docker или ручной запуск backend."
+    die "Режим systemd недоступен: в этой системе нет рабочего systemd (PID 1). Для LXC-установки нужен systemd."
   fi
   TARGET_ROOT="$(ask_path_value_maybe_auto "Каталог установки runtime" "$TARGET_ROOT")"
   ensure_dependencies systemd
@@ -782,6 +791,9 @@ install_or_update_systemd() {
   if [[ ! -f "$TARGET_ROOT/taskboard/.env" ]]; then
     install -m 0644 "$SOURCE_ROOT/taskboard/.env.systemd.example" "$TARGET_ROOT/taskboard/.env"
   fi
+  if [[ ! -f "$TARGET_ROOT/taskboard/.env.frontend" ]]; then
+    install -m 0644 "$SOURCE_ROOT/taskboard/.env.frontend.example" "$TARGET_ROOT/taskboard/.env.frontend"
+  fi
 
   "$PYTHON_BIN" -m venv "$TARGET_ROOT/taskboard/.venv"
   "$TARGET_ROOT/taskboard/.venv/bin/pip" install --upgrade pip
@@ -792,39 +804,12 @@ install_or_update_systemd() {
   remove_obsolete_embedded_watcher_unit
   install_rclone_web_service
   systemctl enable "$SERVICE_NAME"
+  systemctl enable "$FRONTEND_SERVICE_NAME"
   systemctl restart "$SERVICE_NAME"
+  systemctl restart "$FRONTEND_SERVICE_NAME"
 
   log "Systemd установка/обновление завершены."
   print_access_summary "systemd"
-}
-
-install_or_update_docker() {
-  initialize_install_preferences
-  need_root
-  TARGET_ROOT="$(ask_path_value_maybe_auto "Каталог установки runtime" "$TARGET_ROOT")"
-  ensure_dependencies docker
-  prepare_source_checkout
-  choose_jobs_template_mode
-
-  if confirm_maybe_auto "Выполнить переход с legacy и удалить старые скрипты/unit'ы?" "no"; then
-    cleanup_legacy
-  fi
-
-  copy_runtime_bundle "$SOURCE_ROOT" "$TARGET_ROOT"
-  install_initial_jobs_catalog "$SOURCE_ROOT" "$TARGET_ROOT"
-  if [[ ! -f "$TARGET_ROOT/taskboard/.env.docker" ]]; then
-    install -m 0644 "$SOURCE_ROOT/taskboard/.env.docker.example" "$TARGET_ROOT/taskboard/.env.docker"
-  fi
-
-  install_rclone_web_service
-
-  (
-    cd "$TARGET_ROOT/taskboard"
-    docker_compose --env-file .env.docker up -d --build
-  )
-
-  log "Docker установка/обновление завершены."
-  print_access_summary "docker"
 }
 
 backup_path() {
@@ -915,7 +900,9 @@ uninstall_taskboard() {
   if confirm "Продолжить удаление taskboard-служб?" "no"; then
     if has_working_systemd; then
       systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true
+      systemctl disable --now "$FRONTEND_SERVICE_NAME" 2>/dev/null || true
       rm -f "$SYSTEMD_DIR/$SERVICE_NAME"
+      rm -f "$SYSTEMD_DIR/$FRONTEND_SERVICE_NAME"
       if [[ -f "$RCLONE_WEB_INSTALLED_MARKER" ]]; then
         systemctl disable --now "$RCLONE_WEB_SERVICE_NAME" 2>/dev/null || true
         rm -f "$SYSTEMD_DIR/$RCLONE_WEB_SERVICE_NAME"
@@ -925,28 +912,17 @@ uninstall_taskboard() {
       fi
       systemctl daemon-reload || true
       systemctl reset-failed "$SERVICE_NAME" 2>/dev/null || true
+      systemctl reset-failed "$FRONTEND_SERVICE_NAME" 2>/dev/null || true
       [[ -f "$RCLONE_WEB_INSTALLED_MARKER" ]] && systemctl reset-failed "$RCLONE_WEB_SERVICE_NAME" 2>/dev/null || true
     else
       log_warn "systemd недоступен: service не может быть остановлен через systemctl, будет только удалён unit-файл."
       rm -f "$SYSTEMD_DIR/$SERVICE_NAME"
+      rm -f "$SYSTEMD_DIR/$FRONTEND_SERVICE_NAME"
       if [[ -f "$RCLONE_WEB_INSTALLED_MARKER" ]]; then
         rm -f "$SYSTEMD_DIR/$RCLONE_WEB_SERVICE_NAME" "$RCLONE_WEB_INSTALLED_MARKER"
       else
         log "Существующий $RCLONE_WEB_SERVICE_NAME не удаляется: он не был создан этим installer."
       fi
-    fi
-  fi
-
-  if [[ -f "$TARGET_ROOT/taskboard/docker-compose.yml" ]]; then
-    if command_exists docker && { docker compose version >/dev/null 2>&1 || command_exists docker-compose; }; then
-      if confirm "Остановить docker compose stack в $TARGET_ROOT/taskboard?" "yes"; then
-        (
-          cd "$TARGET_ROOT/taskboard"
-          docker_compose --env-file .env.docker down || true
-        )
-      fi
-    else
-      log_warn "Docker/Compose недоступен: остановка compose stack пропущена."
     fi
   fi
 
@@ -993,7 +969,7 @@ uninstall_taskboard() {
 print_dependency_status() {
   local command_name package_name status_line
   log "  зависимости:"
-  for command_name in git curl install systemctl "$PYTHON_BIN" rclone docker; do
+  for command_name in git curl install systemctl "$PYTHON_BIN" rclone; do
     package_name="$(package_for_command "$command_name")"
     if command_exists "$command_name"; then
       status_line="${C_GREEN}ok${C_RESET}"
@@ -1019,18 +995,6 @@ print_dependency_status() {
     printf '    - %-14s : %b (pkg: %s)\n' "python3-venv" "$status_line" "python3-venv"
   fi
 }
-print_docker_status() {
-  if ! command_exists docker; then
-    log "  docker: команда docker не найдена"
-    return
-  fi
-  local container_state
-  container_state="$(docker inspect -f '{{.State.Status}}' "$DOCKER_CONTAINER_NAME" 2>/dev/null || true)"
-  [[ -n "$container_state" ]] \
-    && log "  docker: контейнер '$DOCKER_CONTAINER_NAME' ${C_GREEN}найден${C_RESET} (state=$container_state)" \
-    || log "  docker: контейнер '$DOCKER_CONTAINER_NAME' ${C_RED}не найден${C_RESET}"
-}
-
 print_status() {
   invalidate_runtime_caches
   log ""
@@ -1042,6 +1006,12 @@ print_status() {
       systemctl is-active --quiet "$SERVICE_NAME" && log "  active: yes" || log_warn "active: no"
     else
       log "  systemd unit: $SERVICE_NAME ${C_RED}не найден${C_RESET}"
+    fi
+    if systemctl list-unit-files "$FRONTEND_SERVICE_NAME" --no-legend >/dev/null 2>&1; then
+      log "  frontend unit: $FRONTEND_SERVICE_NAME ${C_GREEN}найден${C_RESET}"
+      systemctl is-active --quiet "$FRONTEND_SERVICE_NAME" && log "  frontend active: yes" || log_warn "frontend active: no"
+    else
+      log "  frontend unit: $FRONTEND_SERVICE_NAME ${C_RED}не найден${C_RESET}"
     fi
     if systemctl list-unit-files "$RCLONE_WEB_SERVICE_NAME" --no-legend >/dev/null 2>&1; then
       log "  rclone web unit: $RCLONE_WEB_SERVICE_NAME ${C_GREEN}найден${C_RESET}"
@@ -1056,7 +1026,6 @@ print_status() {
   [[ -d "$TARGET_ROOT" ]] \
     && log "  runtime: $TARGET_ROOT ${C_GREEN}найден${C_RESET}" \
     || log "  runtime: $TARGET_ROOT ${C_RED}не найден${C_RESET}"
-  print_docker_status
   print_dependency_status
   [[ -n "$SCRIPT_REPO_ROOT" ]] && log "  current git checkout: $SCRIPT_REPO_ROOT"
   log ""
@@ -1076,10 +1045,9 @@ main_menu() {
     printf '%b
 ' "$systemd_menu_line"
     cat <<'MENU'
-  2) Установить/обновить через Docker
-  3) Только переход с legacy: backup + удалить старые legacy-скрипты и unit'ы
-  4) Удалить taskboard-установку
-  5) Выйти
+  2) Только переход с legacy: backup + удалить старые legacy-скрипты и unit'ы
+  3) Удалить taskboard-установку
+  4) Выйти
 MENU
     local choice
     read -r -p "Номер действия [1-5]: " choice
@@ -1091,10 +1059,9 @@ MENU
           log_err "Пункт 1 недоступен: в этой системе нет рабочего systemd."
         fi
         ;;
-      2) install_or_update_docker ;;
-      3) TARGET_ROOT="$(ask_path_value "Каталог для migration-backups" "$TARGET_ROOT")"; cleanup_legacy ;;
-      4) uninstall_taskboard ;;
-      5|q|quit|exit) exit 0 ;;
+      2) TARGET_ROOT="$(ask_path_value "Каталог для migration-backups" "$TARGET_ROOT")"; cleanup_legacy ;;
+      3) uninstall_taskboard ;;
+      4|q|quit|exit) exit 0 ;;
       *) log "Неизвестный выбор: $choice" ;;
     esac
   done
@@ -1105,7 +1072,6 @@ trap on_error ERR
 
 case "${1:-}" in
   systemd) install_or_update_systemd ;;
-  docker) install_or_update_docker ;;
   legacy-cleanup|migrate-legacy) TARGET_ROOT="$(ask_path_value "Каталог для migration-backups" "$TARGET_ROOT")"; cleanup_legacy ;;
   uninstall|remove) uninstall_taskboard ;;
   ""|menu) main_menu ;;
@@ -1114,7 +1080,6 @@ case "${1:-}" in
 Usage:
   $0                 # interactive menu
   $0 systemd         # install/update systemd deployment
-  $0 docker          # install/update docker deployment
   $0 migrate-legacy  # backup and remove legacy scripts and units
   $0 uninstall       # remove taskboard deployment
 
@@ -1123,6 +1088,10 @@ Environment:
   SOURCE_ROOT=${SOURCE_ROOT:-auto}
   DEFAULT_GIT_URL=$DEFAULT_GIT_URL
   DEFAULT_GIT_REF=$DEFAULT_GIT_REF
+  SERVICE_NAME=$SERVICE_NAME
+  FRONTEND_SERVICE_NAME=$FRONTEND_SERVICE_NAME
+  TASKBOARD_PUBLIC_PORT=$TASKBOARD_PUBLIC_PORT
+  TASKBOARD_BACKEND_PORT=$TASKBOARD_BACKEND_PORT
   JOBS_TEMPLATE_MODE=${JOBS_TEMPLATE_MODE:-examples|empty}
   RCLONE_WEB_SERVICE_NAME=$RCLONE_WEB_SERVICE_NAME
   RCLONE_WEB_ADDR=$RCLONE_WEB_ADDR

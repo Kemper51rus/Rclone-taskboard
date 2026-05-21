@@ -11,11 +11,13 @@ import time
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .config import Settings, load_settings
+from .cloud_browse import _browse_cloud_directories
 from .domain import (
+    ArchiveSettings,
     BackupOptions,
     BandwidthSettings,
     CloudSettings,
@@ -64,8 +66,6 @@ event_watcher = FilesystemWatcher(
     catalog=catalog,
     on_event=orchestrator.enqueue_event,
 )
-DASHBOARD_HTML = Path(__file__).with_name("dashboard.html").read_text(encoding="utf-8")
-APP_LOGO_PATH = Path(__file__).with_name("rclone-taskboard-logo.svg")
 FS_ROOTS = ["/media", "/srv", "/home", "/root", "/mnt", "/tmp"]
 RUN_HISTORY_RETENTION_DAYS = 365
 RUN_HISTORY_LAST_PRUNED_AT_STATE_KEY = "run_history_last_pruned_at"
@@ -103,6 +103,15 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan,
 )
+
+if settings.cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 def _get_bearer_token(header_value: str | None) -> str | None:
@@ -449,6 +458,16 @@ class RetentionPayload(BaseModel):
     extra_args: list[str] = Field(default_factory=list)
 
 
+class ArchivePayload(BaseModel):
+    enabled: bool = False
+    filename_template: str = "{key}-{date}.7z"
+    date_format: str = "%Y-%m-%d_%H-%M-%S"
+    compression_level: int = Field(default=5, ge=0, le=9)
+    temp_dir: str | None = None
+    password: str | None = None
+    encrypt_headers: bool = False
+
+
 class BackupJobPayload(BaseModel):
     key: str
     description: str | None = None
@@ -465,6 +484,7 @@ class BackupJobPayload(BaseModel):
     schedule: SchedulePayload = Field(default_factory=SchedulePayload)
     options: BackupOptionsPayload = Field(default_factory=BackupOptionsPayload)
     retention: RetentionPayload = Field(default_factory=RetentionPayload)
+    archive: ArchivePayload = Field(default_factory=ArchivePayload)
     notifications: JobNotificationPayload = Field(default_factory=JobNotificationPayload)
     watcher_enabled: bool = False
     order: int = 10
@@ -488,6 +508,7 @@ class JobPayload(BaseModel):
     schedule: SchedulePayload = Field(default_factory=SchedulePayload)
     options: BackupOptionsPayload = Field(default_factory=BackupOptionsPayload)
     retention: RetentionPayload = Field(default_factory=RetentionPayload)
+    archive: ArchivePayload = Field(default_factory=ArchivePayload)
     notifications: JobNotificationPayload = Field(default_factory=JobNotificationPayload)
     watcher_enabled: bool = False
     order: int = 10
@@ -702,14 +723,15 @@ def _refresh_catalog_clouds_from_rclone() -> list[CloudSettings]:
         return catalog.raw_clouds()
 
 
-@app.get("/", response_class=HTMLResponse)
-def dashboard() -> str:
-    return DASHBOARD_HTML
-
-
-@app.get("/favicon.svg")
-def favicon() -> FileResponse:
-    return FileResponse(APP_LOGO_PATH, media_type="image/svg+xml")
+@app.get("/")
+def api_root() -> dict[str, Any]:
+    return {
+        "service": settings.app_name,
+        "component": "backend",
+        "status": "ok",
+        "api": "/api/health",
+        "frontend": "served by rclone-taskboard-frontend",
+    }
 
 
 @app.get("/api/health")
@@ -1273,6 +1295,7 @@ def update_backups(payload: BackupCatalogPayload) -> dict[str, Any]:
                 transfer_mode=item.transfer_mode,
                 options=BackupOptions(**item.options.model_dump()),
                 retention=RetentionSettings(**item.retention.model_dump()),
+                archive=ArchiveSettings(**item.archive.model_dump()),
                 notifications=JobNotificationSettings(**item.notifications.model_dump()),
                 watcher_enabled=item.watcher_enabled,
             ).validate()
@@ -1370,6 +1393,7 @@ def update_jobs(payload: JobCatalogPayload) -> dict[str, Any]:
                     transfer_mode=item.transfer_mode,
                     options=BackupOptions(**item.options.model_dump()),
                     retention=RetentionSettings(**item.retention.model_dump()),
+                    archive=ArchiveSettings(**item.archive.model_dump()),
                     watcher_enabled=item.watcher_enabled,
                 ).validate()
             )
@@ -1452,6 +1476,21 @@ def browse_directories(path: str | None = None, include_files: bool = False) -> 
         "directories": directories,
         "files": files,
     }
+
+
+@app.get("/api/clouds/browse")
+def browse_cloud_directories(cloud_key: str, path: str | None = None) -> dict[str, Any]:
+    cloud = catalog.get_cloud(cloud_key.strip())
+    if not cloud or not cloud.enabled:
+        raise HTTPException(status_code=404, detail="cloud not found")
+    if not cloud.remote_name:
+        raise HTTPException(status_code=400, detail="cloud has no rclone remote")
+    try:
+        return _browse_cloud_directories(cloud, path)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/runs")

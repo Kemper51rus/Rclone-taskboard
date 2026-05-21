@@ -6,6 +6,7 @@ import shutil
 from typing import Any
 
 from .domain import (
+    ArchiveSettings,
     BackupOptions,
     BandwidthSettings,
     CloudSettings,
@@ -164,6 +165,7 @@ def job_to_storage_dict(job: JobDefinition) -> dict[str, Any]:
         item["transfer_mode"] = normalized.transfer_mode
         item["options"] = normalized.options.to_dict()
         item["retention"] = normalized.retention.to_dict()
+        item["archive"] = normalized.archive.to_dict()
     else:
         item["command"] = normalized.command
         command_options = normalized.options.normalized()
@@ -237,6 +239,7 @@ def _load_job(
             transfer_mode=transfer_mode,
             options=options,
             retention=_load_retention(raw.get("retention")),
+            archive=_load_archive(raw.get("archive")),
             notifications=_load_notifications(raw.get("notifications")),
             watcher_enabled=bool(raw.get("watcher_enabled", False)),
         ).validate()
@@ -404,6 +407,20 @@ def _load_retention(raw: Any) -> RetentionSettings:
         mailru_safe_preset=bool(raw.get("mailru_safe_preset", False)),
         exclude=list(raw.get("exclude", [])),
         extra_args=list(raw.get("extra_args", [])),
+    ).normalized()
+
+
+def _load_archive(raw: Any) -> ArchiveSettings:
+    if not isinstance(raw, dict):
+        return ArchiveSettings()
+    return ArchiveSettings(
+        enabled=bool(raw.get("enabled", False)),
+        filename_template=str(raw.get("filename_template", "") or ""),
+        date_format=str(raw.get("date_format", "") or ""),
+        compression_level=int(raw.get("compression_level", 5) or 5),
+        temp_dir=_clean_optional_text(raw.get("temp_dir")),
+        password=_clean_optional_text(raw.get("password")),
+        encrypt_headers=bool(raw.get("encrypt_headers", False)),
     ).normalized()
 
 
@@ -683,6 +700,7 @@ def _migrate_retention_commands(jobs: list[JobDefinition]) -> tuple[list[JobDefi
                 exclude=retention_settings.exclude,
                 extra_args=retention_settings.extra_args,
             ),
+            archive=backup.archive,
             notifications=backup.notifications,
         ).validate()
         migrated_jobs[backup_index] = migrated_backup

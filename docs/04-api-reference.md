@@ -8,12 +8,14 @@
 
 ---
 
-## 🌐 Dashboard
+## 🌐 Backend root и frontend
 
 | Method | Endpoint | Назначение |
 | --- | --- | --- |
-| `GET` | `/` | Возвращает HTML dashboard |
-| `GET` | `/favicon.svg` | Возвращает SVG-иконку приложения |
+| `GET` | `/` | Backend health/info JSON: сервис, компонент, статус и ссылка на `/api/health` |
+
+HTML dashboard и `/favicon.svg` теперь отдаются отдельным frontend-сервисом из `taskboard/frontend/static`.
+Новый frontend должен работать с backend через `/api/*`; штатный frontend-сервис проксирует этот префикс к backend.
 
 ---
 
@@ -114,6 +116,8 @@ Runtime-поля обновляются на каждый запрос, а ме�
 | `PUT` | `/api/bandwidth` | Сохранить глобальный лимит скорости |
 | `GET` | `/api/logging` | Получить настройки `rclone`-логирования |
 | `PUT` | `/api/logging` | Настроить ручное и автоматическое `rclone`-логирование |
+| `PUT` | `/api/scheduler` | Включить или выключить scheduler runtime |
+| `PUT` | `/api/antibot` | Включить или выключить anti-bot задержки запусков |
 | `GET` | `/api/watcher` | Получить настройки и runtime-статус watcher |
 | `PUT` | `/api/watcher` | Включить или отключить watcher и изменить debounce |
 
@@ -123,6 +127,8 @@ Runtime-поля обновляются на каждый запрос, а ме�
 - `PUT /api/queues`: `allow_parallel_profiles`, `allow_scheduler_queueing`, `allow_event_queueing`, `definitions`
 - `PUT /api/bandwidth`: `limit`
 - `PUT /api/logging`: `rclone_log_enabled`, `auto_rclone_log_enabled`, `auto_rclone_log_threshold`
+- `PUT /api/scheduler`: `enabled`
+- `PUT /api/antibot`: `enabled`
 - `PUT /api/watcher`: `enabled`, `debounce_seconds`
 
 ---
@@ -134,6 +140,7 @@ Cloud settings читаются из `rclone.conf`, но приложение с
 | Method | Endpoint | Назначение |
 | --- | --- | --- |
 | `GET` | `/api/clouds` | Получить список облаков, считанных из `rclone.conf` |
+| `GET` | `/api/clouds/browse` | Получить дочерние папки внутри выбранного cloud remote |
 | `PUT` | `/api/clouds/{cloud_key}/lock` | Включить или выключить сериализацию запусков для конкретного Mail.ru remote |
 | `PUT` | `/api/clouds` | Существует, но возвращает `403` |
 | `POST` | `/api/clouds/import-rclone` | Существует, но возвращает `403` |
@@ -147,11 +154,14 @@ Cloud settings читаются из `rclone.conf`, но приложение с
 | Method | Endpoint | Назначение |
 | --- | --- | --- |
 | `GET` | `/api/fs/browse` | Получить список корней или дочерних директорий |
+| `GET` | `/api/clouds/browse` | Получить список дочерних папок в cloud remote |
 
 ### Query params
 
 - `path` — абсолютный путь; если параметр не передан, возвращаются корневые директории из разрешённого списка
 - `include_files` — если `true`, вместе с директориями возвращаются файлы; используется для выбора path-исключений
+- `cloud_key` для `GET /api/clouds/browse` — ключ облака из `GET /api/clouds`
+- `path` для `GET /api/clouds/browse` — путь внутри remote; пустое значение означает корень remote
 
 ---
 
@@ -218,6 +228,36 @@ Cloud settings читаются из `rclone.conf`, но приложение с
   `retries_sleep`, `fast_list`, `no_traverse`, `debug_dump`, `mailru_safe_preset`, `exclude`, `extra_args`
 - `backup.options.force_rclone_log` принудительно включает step-лог `rclone` для конкретной backup-задачи без включения глобального логирования
 - `backup.options.exclude_paths` поддерживает path-исключения вида `{"path": "/abs/path", "kind": "file|directory"}`; путь должен быть внутри `source_path`
+- `backup.archive` поддерживает 7z-архивацию перед отправкой в облако:
+  `enabled`, `filename_template`, `date_format`, `compression_level`, `temp_dir`, `password`, `encrypt_headers`
+- Для backup-задач с облаком используйте `cloud_key` и `destination_subpath`; backend сам собирает итоговый `destination_path`
+
+---
+
+## 🧩 Контракт для нового frontend
+
+Новый frontend может не использовать старый HTML вообще и подключаться только к backend API:
+
+- стартовая загрузка: `GET /api/state` + `GET /api/jobs`
+- список задач и редактор: `GET /api/jobs`, сохранение через `PUT /api/jobs`
+- запуск задачи: `POST /api/runs/job/{job_key}`
+- запуск профиля: `POST /api/runs`
+- активный прогресс: `copy_progress` из `GET /api/state`
+- история запусков: `GET /api/runs`, детали через `GET /api/runs/{run_id}`
+- логи: `GET /api/logging/rclone-files`, `GET /api/logging/rclone-files/{step_id}`
+- настройки: `GET/PUT` endpoints из раздела «Настройки»
+- browse локального пути: `GET /api/fs/browse`
+- browse облака: `GET /api/clouds/browse`
+
+При split-deployment штатный frontend слушает публичный порт и проксирует `/api/*` к backend.
+Если frontend живёт на другом LXC, укажите в его `.env.frontend`:
+
+```env
+TASKBOARD_FRONTEND_API_PROXY_URL=http://<backend-host>:8081
+```
+
+На backend-LXC для такого режима нужно слушать доступный адрес (`TASKBOARD_BACKEND_HOST=0.0.0.0`) или открыть backend через внешний reverse-proxy.
+Если браузер обращается к backend напрямую, настройте `TASKBOARD_CORS_ORIGINS`.
 
 ---
 

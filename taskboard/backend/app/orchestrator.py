@@ -674,6 +674,11 @@ class Orchestrator:
                     timezone_name=self.settings.timezone,
                 )
             effective_status = "paused" if self.runner.is_paused(int(step["id"])) else step["status"]
+            resources = (
+                self.runner.resource_usage(int(step["id"]))
+                if effective_status in {"running", "paused"}
+                else None
+            )
             items.append(
                 {
                     "step_id": step["id"],
@@ -695,7 +700,16 @@ class Orchestrator:
                     "total": progress.get("total"),
                     "speed": progress.get("speed"),
                     "eta": progress.get("eta"),
+                    "phase": progress.get("phase"),
+                    "activity": progress.get("activity"),
+                    "current": progress.get("current"),
+                    "current_percent": progress.get("current_percent"),
+                    "current_total": progress.get("current_total"),
+                    "file_count": progress.get("file_count"),
+                    "file_total": progress.get("file_total"),
+                    "file_percent": progress.get("file_percent"),
                     "raw_line": progress.get("raw_line"),
+                    "resources": resources,
                     "log_step_id": step["id"] if step.get("log_mode") else None,
                     "log_mode": step.get("log_mode"),
                     "delayed_by_antibot": effective_status == "queued"
@@ -811,13 +825,6 @@ class Orchestrator:
                 "file_total": None,
             }
         command = step.get("command") or []
-        if not command or str(command[0]).strip() != "rclone":
-            return {
-                "transferred_bytes": None,
-                "total_bytes": None,
-                "file_count": None,
-                "file_total": None,
-            }
         return extract_transfer_metrics(
             progress=step.get("progress"),
             output_text="\n".join(item for item in (stdout_tail, stderr_tail) if item),
