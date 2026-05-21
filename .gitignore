@@ -2,14 +2,12 @@
 .codex
 taskboard/.env
 taskboard/.env.frontend
-taskboard/.env.frontend-next
 taskboard/backend/app/jobs/default_jobs.json
 Security.md
 docs/Security.md
 docs/runtime-service.local.md
 taskboard/Security.md
 git-push.sh
-promt/
 
 # Sensitive runtime state and logs
 state/

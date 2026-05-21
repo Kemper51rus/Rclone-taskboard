@@ -234,9 +234,9 @@ Cloud settings читаются из `rclone.conf`, но приложение с
 
 ---
 
-## 🧩 Контракт для нового frontend
+## 🧩 Контракт для внешних frontend-клиентов
 
-Новый frontend может не использовать старый HTML вообще и подключаться только к backend API:
+Внешний frontend может не использовать встроенный HTML вообще и подключаться только к backend API:
 
 - стартовая загрузка: `GET /api/state` + `GET /api/jobs`
 - список задач и редактор: `GET /api/jobs`, сохранение через `PUT /api/jobs`
@@ -250,7 +250,6 @@ Cloud settings читаются из `rclone.conf`, но приложение с
 - browse облака: `GET /api/clouds/browse`
 
 При split-deployment штатный frontend слушает публичный порт и проксирует `/api/*` к backend.
-Экспериментальный frontend из `taskboard/frontend-next/static` использует тот же контракт и может жить отдельным сервисом или отдельным LXC без изменений backend.
 Если frontend живёт на другом LXC, укажите в его `.env.frontend`:
 
 ```env
