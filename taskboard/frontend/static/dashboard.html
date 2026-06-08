@@ -2263,18 +2263,6 @@
               <button type="button" class="toggle-chip" id="jobWatcherEnabled" aria-pressed="false">Следить watcher за исходным каталогом этой задачи</button>
               <div class="field-meta">При изменениях в исходном каталоге backend watcher сможет запускать именно эту backup-задачу.</div>
             </div>
-            <div class="field full" data-job-kind="backup">
-              <button type="button" class="toggle-chip" id="transferMonitorEnabled" aria-pressed="false">Уведомлять, если несколько дней не передавались новые файлы</button>
-              <div class="field-meta">Проверка идёт по истории успешных шагов: `file_count &gt; 0` или `transferred_bytes &gt; 0`. Уведомления отправляются через Gotify не чаще раза в сутки.</div>
-            </div>
-            <div class="field" data-job-kind="backup">
-              <label for="transferMonitorDays">Порог без передач, дней</label>
-              <input id="transferMonitorDays" type="number" min="1" max="3650" value="2" />
-            </div>
-            <div class="field" data-job-kind="backup">
-              <label for="transferMonitorPriority">Приоритет Gotify</label>
-              <input id="transferMonitorPriority" type="number" min="1" max="10" placeholder="по умолчанию" />
-            </div>
 	            <div class="field full" data-job-kind="backup">
 	              <label for="jobCloud">Облако</label>
               <select id="jobCloud"></select>
@@ -2588,6 +2576,18 @@
 	                <label for="jobNotifyTitle">Свой заголовок уведомления</label>
 	                <input id="jobNotifyTitle" placeholder="например: Photo backup" />
 	              </div>
+                <div class="field full" data-job-kind="backup">
+                  <button type="button" class="toggle-chip" id="transferMonitorEnabled" aria-pressed="false">Уведомлять, если несколько дней не передавались новые файлы</button>
+                  <div class="field-meta">Проверка идёт по истории успешных шагов: `file_count &gt; 0` или `transferred_bytes &gt; 0`. Уведомления отправляются через Gotify не чаще раза в сутки.</div>
+                </div>
+                <div class="field" data-job-kind="backup">
+                  <label for="transferMonitorDays">Порог без передач, дней</label>
+                  <input id="transferMonitorDays" type="number" min="1" max="3650" value="2" />
+                </div>
+                <div class="field" data-job-kind="backup">
+                  <label for="transferMonitorPriority">Приоритет Gotify</label>
+                  <input id="transferMonitorPriority" type="number" min="1" max="10" placeholder="по умолчанию" />
+                </div>
 	              </div>
               </div>
 	          </details>
