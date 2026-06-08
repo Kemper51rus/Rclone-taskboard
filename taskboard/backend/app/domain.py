@@ -746,6 +746,26 @@ class JobNotificationSettings:
 
 
 @dataclass(frozen=True)
+class TransferMonitorSettings:
+    enabled: bool = False
+    stale_days: int = 2
+    priority: int | None = None
+
+    def normalized(self) -> TransferMonitorSettings:
+        priority = self.priority
+        if priority is not None:
+            priority = min(10, max(1, int(priority)))
+        return TransferMonitorSettings(
+            enabled=bool(self.enabled),
+            stale_days=max(1, min(3650, int(self.stale_days or 2))),
+            priority=priority,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self.normalized())
+
+
+@dataclass(frozen=True)
 class JobDefinition:
     key: str
     order: int
@@ -767,6 +787,7 @@ class JobDefinition:
     retention: RetentionSettings = field(default_factory=RetentionSettings)
     archive: ArchiveSettings = field(default_factory=ArchiveSettings)
     notifications: JobNotificationSettings = field(default_factory=JobNotificationSettings)
+    transfer_monitor: TransferMonitorSettings = field(default_factory=TransferMonitorSettings)
     watcher_enabled: bool = False
 
     def validate(self) -> JobDefinition:
@@ -786,6 +807,9 @@ class JobDefinition:
         if kind != "backup":
             archive = ArchiveSettings()
         notifications = self.notifications.normalized()
+        transfer_monitor = self.transfer_monitor.normalized()
+        if kind != "backup":
+            transfer_monitor = TransferMonitorSettings()
         watcher_enabled = bool(self.watcher_enabled) and kind == "backup" and bool(source_path)
         description = self.description.strip() or raw_key
         title = (self.title or "").strip() or description
@@ -826,6 +850,7 @@ class JobDefinition:
             retention=retention,
             archive=archive,
             notifications=notifications,
+            transfer_monitor=transfer_monitor,
             watcher_enabled=watcher_enabled,
         )
 

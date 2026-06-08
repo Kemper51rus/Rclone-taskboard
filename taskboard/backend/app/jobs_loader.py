@@ -21,6 +21,7 @@ from .domain import (
     QueueSettings,
     RetentionSettings,
     ScheduleDefinition,
+    TransferMonitorSettings,
     WatcherSettings,
 )
 
@@ -155,6 +156,7 @@ def job_to_storage_dict(job: JobDefinition) -> dict[str, Any]:
         "profile": normalized.profile,
         "schedule": normalized.schedule.to_dict(),
         "notifications": normalized.notifications.to_dict(),
+        "transfer_monitor": normalized.transfer_monitor.to_dict(),
         "watcher_enabled": normalized.watcher_enabled,
     }
     if normalized.kind == "backup":
@@ -241,6 +243,7 @@ def _load_job(
             retention=_load_retention(raw.get("retention")),
             archive=_load_archive(raw.get("archive")),
             notifications=_load_notifications(raw.get("notifications")),
+            transfer_monitor=_load_transfer_monitor(raw.get("transfer_monitor")),
             watcher_enabled=bool(raw.get("watcher_enabled", False)),
         ).validate()
 
@@ -262,6 +265,7 @@ def _load_job(
         command=command,
         options=_load_command_options(raw.get("options")),
         notifications=_load_notifications(raw.get("notifications")),
+        transfer_monitor=_load_transfer_monitor(raw.get("transfer_monitor")),
     ).validate()
 
 
@@ -323,6 +327,17 @@ def _load_notifications(raw: Any) -> JobNotificationSettings:
         on_failure=bool(raw.get("on_failure", True)),
         priority=int(priority) if priority not in (None, "") else None,
         custom_title=raw.get("custom_title"),
+    ).normalized()
+
+
+def _load_transfer_monitor(raw: Any) -> TransferMonitorSettings:
+    if not isinstance(raw, dict):
+        return TransferMonitorSettings()
+    priority = raw.get("priority")
+    return TransferMonitorSettings(
+        enabled=bool(raw.get("enabled", False)),
+        stale_days=int(raw.get("stale_days", 2) or 2),
+        priority=int(priority) if priority not in (None, "") else None,
     ).normalized()
 
 

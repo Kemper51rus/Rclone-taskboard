@@ -929,6 +929,36 @@ class Storage:
                 ).fetchone()
         return row is not None
 
+    def latest_successful_transfer_for_job(self, job_key: str) -> dict[str, Any] | None:
+        with self._lock:
+            with self._connect() as conn:
+                row = conn.execute(
+                    """
+                    SELECT
+                        rs.id AS step_id,
+                        rs.run_id,
+                        rs.job_key,
+                        rs.finished_at,
+                        rs.transferred_bytes,
+                        rs.file_count,
+                        COALESCE(rs.finished_at, r.finished_at, rs.started_at, r.started_at, r.requested_at) AS occurred_at
+                    FROM run_steps rs
+                    JOIN runs r ON r.id = rs.run_id
+                    WHERE rs.step_kind = 'job'
+                      AND rs.job_key = ?
+                      AND rs.status = 'succeeded'
+                      AND r.status = 'succeeded'
+                      AND (
+                        COALESCE(rs.file_count, 0) > 0
+                        OR COALESCE(rs.transferred_bytes, 0) > 0
+                      )
+                    ORDER BY occurred_at DESC, rs.id DESC
+                    LIMIT 1
+                    """,
+                    (job_key,),
+                ).fetchone()
+        return dict(row) if row else None
+
     def latest_job_run_map(self) -> dict[str, dict[str, Any]]:
         with self._lock:
             with self._connect() as conn:

@@ -40,6 +40,10 @@ RUN_HISTORY_RETENTION_DAYS = 365
 RUN_HISTORY_LAST_PRUNED_AT_STATE_KEY = "run_history_last_pruned_at"
 SCHEDULER_ENABLED_STATE_KEY = "scheduler_enabled"
 ANTIBOT_ENABLED_STATE_KEY = "antibot_enabled"
+TRANSFER_MONITOR_LAST_CHECKED_AT_STATE_KEY = "transfer_monitor_last_checked_at"
+TRANSFER_MONITOR_LAST_ALERT_PREFIX = "transfer_monitor_last_alert_at:"
+TRANSFER_MONITOR_CHECK_INTERVAL_SECONDS = 3600
+TRANSFER_MONITOR_ALERT_REPEAT_SECONDS = 24 * 3600
 
 
 class Orchestrator:
@@ -67,6 +71,8 @@ class Orchestrator:
         self._scheduler_stop_event = threading.Event()
         self._scheduler_enabled = bool(settings.enable_scheduler)
         self._scheduler_thread: threading.Thread | None = None
+        self._transfer_monitor_stop_event = threading.Event()
+        self._transfer_monitor_thread: threading.Thread | None = None
         self._antibot_enabled = True
         self._copy_start_gate_lock = threading.Lock()
         self._copy_starts_allowed_after: datetime | None = None
@@ -92,10 +98,12 @@ class Orchestrator:
         )
         if self._scheduler_enabled:
             self._start_scheduler()
+        self._start_transfer_monitor()
 
     def stop(self) -> None:
         self._stop_event.set()
         self._scheduler_stop_event.set()
+        self._transfer_monitor_stop_event.set()
         with self._queue_lock:
             threads = [thread for items in self._worker_threads.values() for thread in items]
             for queue_name, workers in self._worker_threads.items():
@@ -108,6 +116,8 @@ class Orchestrator:
             thread.join(timeout=5)
         if self._scheduler_thread:
             self._scheduler_thread.join(timeout=5)
+        if self._transfer_monitor_thread:
+            self._transfer_monitor_thread.join(timeout=5)
 
     def _scheduler_alive(self) -> bool:
         return bool(self._scheduler_thread and self._scheduler_thread.is_alive())
@@ -123,6 +133,20 @@ class Orchestrator:
                 daemon=True,
             )
             self._scheduler_thread.start()
+
+    def _transfer_monitor_alive(self) -> bool:
+        return bool(self._transfer_monitor_thread and self._transfer_monitor_thread.is_alive())
+
+    def _start_transfer_monitor(self) -> None:
+        if self._stop_event.is_set() or self._transfer_monitor_alive():
+            return
+        self._transfer_monitor_stop_event.clear()
+        self._transfer_monitor_thread = threading.Thread(
+            target=self._transfer_monitor_loop,
+            name="taskboard-transfer-monitor",
+            daemon=True,
+        )
+        self._transfer_monitor_thread.start()
 
     def set_scheduler_enabled(self, enabled: bool) -> dict[str, bool]:
         enabled = bool(enabled)
@@ -1037,6 +1061,84 @@ class Orchestrator:
             except Exception:
                 logger.exception("scheduler tick failed")
             self._scheduler_stop_event.wait(5)
+
+    def _transfer_monitor_loop(self) -> None:
+        while not self._stop_event.is_set() and not self._transfer_monitor_stop_event.is_set():
+            try:
+                self._maybe_check_transfer_monitors()
+            except Exception:
+                logger.exception("transfer monitor tick failed")
+            self._transfer_monitor_stop_event.wait(60)
+
+    def _maybe_check_transfer_monitors(self) -> None:
+        now = datetime.now(timezone.utc)
+        last_checked_raw = self.storage.get_state(TRANSFER_MONITOR_LAST_CHECKED_AT_STATE_KEY)
+        if last_checked_raw:
+            try:
+                last_checked_at = datetime.fromisoformat(last_checked_raw)
+                if (now - last_checked_at).total_seconds() < TRANSFER_MONITOR_CHECK_INTERVAL_SECONDS:
+                    return
+            except ValueError:
+                pass
+
+        self.storage.set_state(TRANSFER_MONITOR_LAST_CHECKED_AT_STATE_KEY, now.isoformat())
+        if not self.catalog.gotify.is_configured():
+            return
+
+        for job in self.catalog.raw_jobs():
+            monitor = job.transfer_monitor.normalized()
+            if not job.enabled or job.kind != "backup" or not monitor.enabled:
+                continue
+
+            threshold = now - timedelta(days=monitor.stale_days)
+            latest_transfer = self.storage.latest_successful_transfer_for_job(job.key)
+            latest_transfer_at = self._parse_datetime(latest_transfer.get("occurred_at")) if latest_transfer else None
+            if latest_transfer_at is not None and latest_transfer_at >= threshold:
+                continue
+
+            alert_state_key = f"{TRANSFER_MONITOR_LAST_ALERT_PREFIX}{job.key}"
+            last_alert_raw = self.storage.get_state(alert_state_key)
+            if last_alert_raw:
+                try:
+                    last_alert_at = datetime.fromisoformat(last_alert_raw)
+                    if (now - last_alert_at).total_seconds() < TRANSFER_MONITOR_ALERT_REPEAT_SECONDS:
+                        continue
+                except ValueError:
+                    pass
+
+            latest_label = latest_transfer_at.isoformat() if latest_transfer_at is not None else "нет записей"
+            title = f"Нет новых файлов: {job.title or job.description or job.key}"
+            message = "\n".join(
+                [
+                    f"Задача: {job.key}",
+                    f"Порог: {monitor.stale_days} дн.",
+                    f"Последняя передача файлов: {latest_label}",
+                    f"Источник: {job.source_path or 'не указан'}",
+                    f"Назначение: {job.destination_path or 'не указано'}",
+                    "",
+                    "За указанный период в истории запусков нет успешных передач с file_count > 0 или transferred_bytes > 0.",
+                ]
+            )
+            sent = self.gotify.send(
+                self.catalog.gotify,
+                title=title,
+                message=message,
+                priority=monitor.priority or self.catalog.gotify.default_priority,
+            )
+            if sent:
+                self.storage.set_state(alert_state_key, now.isoformat())
+
+    @staticmethod
+    def _parse_datetime(value: Any) -> datetime | None:
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(str(value))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
 
     def _maybe_schedule_jobs(self, now_local: datetime) -> None:
         jobs = self.catalog.raw_jobs()

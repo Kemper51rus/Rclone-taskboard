@@ -30,6 +30,7 @@ from .domain import (
     QueueSettings,
     RetentionSettings,
     ScheduleDefinition,
+    TransferMonitorSettings,
     WatcherSettings,
 )
 from .gotify import GotifyClient
@@ -440,6 +441,12 @@ class JobNotificationPayload(BaseModel):
     custom_title: str | None = None
 
 
+class TransferMonitorPayload(BaseModel):
+    enabled: bool = False
+    stale_days: int = Field(default=2, ge=1, le=3650)
+    priority: int | None = Field(default=None, ge=1, le=10)
+
+
 class RetentionPayload(BaseModel):
     enabled: bool = False
     min_age: str | None = None
@@ -486,6 +493,7 @@ class BackupJobPayload(BaseModel):
     retention: RetentionPayload = Field(default_factory=RetentionPayload)
     archive: ArchivePayload = Field(default_factory=ArchivePayload)
     notifications: JobNotificationPayload = Field(default_factory=JobNotificationPayload)
+    transfer_monitor: TransferMonitorPayload = Field(default_factory=TransferMonitorPayload)
     watcher_enabled: bool = False
     order: int = 10
 
@@ -510,6 +518,7 @@ class JobPayload(BaseModel):
     retention: RetentionPayload = Field(default_factory=RetentionPayload)
     archive: ArchivePayload = Field(default_factory=ArchivePayload)
     notifications: JobNotificationPayload = Field(default_factory=JobNotificationPayload)
+    transfer_monitor: TransferMonitorPayload = Field(default_factory=TransferMonitorPayload)
     watcher_enabled: bool = False
     order: int = 10
 
@@ -794,6 +803,16 @@ def jobs() -> dict[str, Any]:
         item["last_run_status"] = latest_run.get("status") if latest_run else None
         item["last_run_started_at"] = latest_run.get("started_at") if latest_run else None
         item["last_run_requested_at"] = latest_run.get("requested_at") if latest_run else None
+        monitor = item.get("transfer_monitor") if isinstance(item.get("transfer_monitor"), dict) else {}
+        if monitor.get("enabled"):
+            latest_transfer = storage.latest_successful_transfer_for_job(str(item.get("key", "")))
+            item["transfer_monitor_status"] = {
+                "latest_transfer": latest_transfer,
+                "latest_transfer_at": latest_transfer.get("occurred_at") if latest_transfer else None,
+                "last_alert_at": storage.get_state(f"transfer_monitor_last_alert_at:{item.get('key', '')}"),
+            }
+        else:
+            item["transfer_monitor_status"] = None
     return {
         "profiles": catalog.profiles,
         "gotify": catalog.gotify.to_dict(),
@@ -1297,6 +1316,7 @@ def update_backups(payload: BackupCatalogPayload) -> dict[str, Any]:
                 retention=RetentionSettings(**item.retention.model_dump()),
                 archive=ArchiveSettings(**item.archive.model_dump()),
                 notifications=JobNotificationSettings(**item.notifications.model_dump()),
+                transfer_monitor=TransferMonitorSettings(**item.transfer_monitor.model_dump()),
                 watcher_enabled=item.watcher_enabled,
             ).validate()
         )
@@ -1371,6 +1391,7 @@ def update_jobs(payload: JobCatalogPayload) -> dict[str, Any]:
             profile=item.profile,
             schedule=ScheduleDefinition(**item.schedule.model_dump()),
             notifications=JobNotificationSettings(**item.notifications.model_dump()),
+            transfer_monitor=TransferMonitorSettings(**item.transfer_monitor.model_dump()),
         )
         if item.kind == "command":
             jobs_to_save.append(

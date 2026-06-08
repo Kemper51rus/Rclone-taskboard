@@ -2263,6 +2263,18 @@
               <button type="button" class="toggle-chip" id="jobWatcherEnabled" aria-pressed="false">Следить watcher за исходным каталогом этой задачи</button>
               <div class="field-meta">При изменениях в исходном каталоге backend watcher сможет запускать именно эту backup-задачу.</div>
             </div>
+            <div class="field full" data-job-kind="backup">
+              <button type="button" class="toggle-chip" id="transferMonitorEnabled" aria-pressed="false">Уведомлять, если несколько дней не передавались новые файлы</button>
+              <div class="field-meta">Проверка идёт по истории успешных шагов: `file_count &gt; 0` или `transferred_bytes &gt; 0`. Уведомления отправляются через Gotify не чаще раза в сутки.</div>
+            </div>
+            <div class="field" data-job-kind="backup">
+              <label for="transferMonitorDays">Порог без передач, дней</label>
+              <input id="transferMonitorDays" type="number" min="1" max="3650" value="2" />
+            </div>
+            <div class="field" data-job-kind="backup">
+              <label for="transferMonitorPriority">Приоритет Gotify</label>
+              <input id="transferMonitorPriority" type="number" min="1" max="10" placeholder="по умолчанию" />
+            </div>
 	            <div class="field full" data-job-kind="backup">
 	              <label for="jobCloud">Облако</label>
               <select id="jobCloud"></select>
@@ -5917,6 +5929,7 @@
             ${job.kind !== "backup" ? `<div class="pill">команда</div>` : ""}
             ${job.kind === "backup" ? `<div class="pill">${job.transfer_mode}</div>` : ""}
             ${job.kind === "backup" && job.watcher_enabled ? `<div class="pill">watcher</div>` : ""}
+            ${job.kind === "backup" && job.transfer_monitor?.enabled ? `<div class="pill">мониторинг ${escapeHtml(job.transfer_monitor.stale_days || 2)} дн.</div>` : ""}
             <div class="pill">${job.profile}</div>
             ${!(job.kind === "backup" && job.watcher_enabled && job.schedule_summary === "manual") ? `<div class="pill">${job.schedule_summary}</div>` : ""}
             <div class="pill">timeout ${job.timeout_seconds}s</div>
@@ -6568,6 +6581,11 @@
           priority: formValue("jobNotifyPriority") ? Number(formValue("jobNotifyPriority")) : null,
           custom_title: formValue("jobNotifyTitle") || null,
         },
+        transfer_monitor: {
+          enabled: kind === "backup" ? isTogglePressed("transferMonitorEnabled") : false,
+          stale_days: kind === "backup" ? Number(formValue("transferMonitorDays") || 2) : 2,
+          priority: kind === "backup" && formValue("transferMonitorPriority") ? Number(formValue("transferMonitorPriority")) : null,
+        },
         watcher_enabled: kind === "backup" ? isTogglePressed("jobWatcherEnabled") : false,
       };
       const destinationPreview = document.getElementById("jobDestinationPreview");
@@ -6644,6 +6662,9 @@
       fillJobRcloneOptions(job?.options || {});
       fillArchiveSettings(job?.archive || {});
       setTogglePressed("jobWatcherEnabled", job?.watcher_enabled ?? false);
+      setTogglePressed("transferMonitorEnabled", job?.transfer_monitor?.enabled ?? false);
+      document.getElementById("transferMonitorDays").value = job?.transfer_monitor?.stale_days ?? 2;
+      document.getElementById("transferMonitorPriority").value = job?.transfer_monitor?.priority ?? "";
       fillRetentionRcloneOptions(job?.retention || {});
       setTogglePressed("jobNotifySuccess", job?.notifications?.on_success ?? false);
       setTogglePressed("jobNotifyFailure", job?.notifications?.on_failure ?? true);
@@ -6673,6 +6694,9 @@
       document.getElementById("scheduleHour").value = 3;
       document.getElementById("scheduleMinute").value = 0;
       setTogglePressed("jobWatcherEnabled", false);
+      setTogglePressed("transferMonitorEnabled", false);
+      document.getElementById("transferMonitorDays").value = 2;
+      document.getElementById("transferMonitorPriority").value = "";
       setTogglePressed("archiveEnabled", false);
       document.getElementById("archiveFilenameTemplate").value = "{key}-{date}.7z";
       document.getElementById("archiveDateFormat").value = "%Y-%m-%d_%H-%M-%S";
@@ -6786,6 +6810,9 @@
         if (!job.destination_path.includes(":")) throw new Error("Destination должен быть rclone remote path");
         if (job.retention?.enabled && !job.retention?.min_age) {
           throw new Error("Для очистки в облаке нужно указать возраст, например 30d");
+        }
+        if (job.transfer_monitor?.enabled && Number(job.transfer_monitor.stale_days || 0) < 1) {
+          throw new Error("Для мониторинга передач нужен период минимум 1 день");
         }
       } else if (!job.command.length) {
         throw new Error("Для command нужна хотя бы одна строка команды");
@@ -7659,7 +7686,7 @@
       state.keyEditedManually = Boolean(event.target.value.trim());
     });
 
-    ["jobSource", "jobDestination", "jobDestinationSubpath", "maxAge", "minAge", "jobTransfers", "jobCheckers", "jobTpslimit", "jobTpslimitBurst", "jobRetries", "jobLowLevelRetries", "jobRetriesSleep", "excludeList", "extraArgs", "archiveFilenameTemplate", "archiveDateFormat", "archiveCompressionLevel", "archiveTempDir", "archivePassword", "retentionMinAge", "retentionTransfers", "retentionCheckers", "retentionTpslimit", "retentionTpslimitBurst", "retentionRetries", "retentionLowLevelRetries", "retentionRetriesSleep", "retentionExcludeList", "retentionExtraArgs", "jobNotifyPriority", "jobNotifyTitle", "commandList"].forEach((id) => {
+    ["jobSource", "jobDestination", "jobDestinationSubpath", "maxAge", "minAge", "jobTransfers", "jobCheckers", "jobTpslimit", "jobTpslimitBurst", "jobRetries", "jobLowLevelRetries", "jobRetriesSleep", "excludeList", "extraArgs", "archiveFilenameTemplate", "archiveDateFormat", "archiveCompressionLevel", "archiveTempDir", "archivePassword", "retentionMinAge", "retentionTransfers", "retentionCheckers", "retentionTpslimit", "retentionTpslimitBurst", "retentionRetries", "retentionLowLevelRetries", "retentionRetriesSleep", "retentionExcludeList", "retentionExtraArgs", "transferMonitorDays", "transferMonitorPriority", "jobNotifyPriority", "jobNotifyTitle", "commandList"].forEach((id) => {
       document.getElementById(id).addEventListener("input", () => collectFormJob());
     });
     document.getElementById("excludePathInput").addEventListener("keydown", (event) => {
@@ -7708,7 +7735,7 @@
       updateLoggingPanelHeight();
     });
 
-    ["retentionEnabled", "archiveEnabled", "archiveEncryptHeaders", "jobNotifySuccess", "jobNotifyFailure", "jobWatcherEnabled", "jobMailruSafePreset", "jobFastList", "jobNoTraverse", "jobForceRcloneLog", "commandForceRcloneLog", "retentionMailruSafePreset", "retentionFastList", "retentionNoTraverse"].forEach((id) => {
+    ["retentionEnabled", "archiveEnabled", "archiveEncryptHeaders", "jobNotifySuccess", "jobNotifyFailure", "jobWatcherEnabled", "transferMonitorEnabled", "jobMailruSafePreset", "jobFastList", "jobNoTraverse", "jobForceRcloneLog", "commandForceRcloneLog", "retentionMailruSafePreset", "retentionFastList", "retentionNoTraverse"].forEach((id) => {
       bindToggleChip(id, () => collectFormJob());
     });
 

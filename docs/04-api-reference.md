@@ -230,6 +230,8 @@ Cloud settings читаются из `rclone.conf`, но приложение с
 - `backup.options.exclude_paths` поддерживает path-исключения вида `{"path": "/abs/path", "kind": "file|directory"}`; путь должен быть внутри `source_path`
 - `backup.archive` поддерживает 7z-архивацию перед отправкой в облако:
   `enabled`, `filename_template`, `date_format`, `compression_level`, `temp_dir`, `password`, `encrypt_headers`
+- `backup.transfer_monitor` включает Gotify-мониторинг отсутствия новых передач:
+  `enabled`, `stale_days`, `priority`. Backend смотрит историю успешных job-step и считает передачей шаги с `file_count > 0` или `transferred_bytes > 0`; повторное предупреждение по одной задаче отправляется не чаще раза в сутки.
 - Для backup-задач с облаком используйте `cloud_key` и `destination_subpath`; backend сам собирает итоговый `destination_path`
 
 ---
