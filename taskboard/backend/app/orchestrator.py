@@ -656,7 +656,6 @@ class Orchestrator:
         if result.status != "succeeded" and not notifications.on_failure:
             return
 
-        priority = notifications.priority or self.catalog.gotify.default_priority
         title_prefix = notifications.custom_title or job.title or job.description or job.key
         title = f"{title_prefix}: {'OK' if result.status == 'succeeded' else 'FAILED'}"
         message = "\n".join(
@@ -676,7 +675,7 @@ class Orchestrator:
             self.catalog.gotify,
             title=title,
             message=message,
-            priority=priority,
+            priority=self.catalog.gotify.default_priority,
         )
 
     def _copy_progress_snapshot(self) -> list[dict[str, Any]]:

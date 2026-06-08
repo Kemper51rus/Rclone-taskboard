@@ -2568,10 +2568,9 @@
 		              <div class="field">
 		                <button type="button" class="toggle-chip" id="jobNotifyFailure" aria-pressed="true">Уведомлять об ошибке</button>
 		              </div>
-	              <div class="field">
-	                <label for="jobNotifyPriority">Приоритет</label>
-	                <input id="jobNotifyPriority" type="number" min="1" max="10" placeholder="по умолчанию" />
-	              </div>
+                <div class="field full">
+                  <div class="field-meta">Приоритет обычных уведомлений берётся из глобальных настроек Gotify.</div>
+                </div>
 	              <div class="field full">
 	                <label for="jobNotifyTitle">Свой заголовок уведомления</label>
 	                <input id="jobNotifyTitle" placeholder="например: Photo backup" />
@@ -2585,8 +2584,8 @@
                   <input id="transferMonitorDays" type="number" min="1" max="3650" value="2" />
                 </div>
                 <div class="field" data-job-kind="backup">
-                  <label for="transferMonitorPriority">Приоритет Gotify</label>
-                  <input id="transferMonitorPriority" type="number" min="1" max="10" placeholder="по умолчанию" />
+                  <label for="transferMonitorPriority">Приоритет уведомления о простое передач</label>
+                  <input id="transferMonitorPriority" type="number" min="1" max="10" placeholder="глобальный" />
                 </div>
 	              </div>
               </div>
@@ -6578,7 +6577,7 @@
         notifications: {
           on_success: isTogglePressed("jobNotifySuccess"),
           on_failure: isTogglePressed("jobNotifyFailure"),
-          priority: formValue("jobNotifyPriority") ? Number(formValue("jobNotifyPriority")) : null,
+          priority: null,
           custom_title: formValue("jobNotifyTitle") || null,
         },
         transfer_monitor: {
@@ -6668,7 +6667,6 @@
       fillRetentionRcloneOptions(job?.retention || {});
       setTogglePressed("jobNotifySuccess", job?.notifications?.on_success ?? false);
       setTogglePressed("jobNotifyFailure", job?.notifications?.on_failure ?? true);
-      document.getElementById("jobNotifyPriority").value = job?.notifications?.priority ?? "";
       document.getElementById("jobNotifyTitle").value = job?.notifications?.custom_title || "";
       document.getElementById("commandPreview").value = job ? (job.command_preview || commandPreview(job)) : "";
       renderMailruOptionsHint(job || null);
@@ -6711,7 +6709,6 @@
       document.getElementById("retentionExtraArgs").value = "";
       setTogglePressed("jobNotifySuccess", false);
       setTogglePressed("jobNotifyFailure", true);
-      document.getElementById("jobNotifyPriority").value = "";
       document.getElementById("jobNotifyTitle").value = "";
       [...weekdayGrid.querySelectorAll("input")].forEach((input) => {
         input.checked = false;
@@ -7686,7 +7683,7 @@
       state.keyEditedManually = Boolean(event.target.value.trim());
     });
 
-    ["jobSource", "jobDestination", "jobDestinationSubpath", "maxAge", "minAge", "jobTransfers", "jobCheckers", "jobTpslimit", "jobTpslimitBurst", "jobRetries", "jobLowLevelRetries", "jobRetriesSleep", "excludeList", "extraArgs", "archiveFilenameTemplate", "archiveDateFormat", "archiveCompressionLevel", "archiveTempDir", "archivePassword", "retentionMinAge", "retentionTransfers", "retentionCheckers", "retentionTpslimit", "retentionTpslimitBurst", "retentionRetries", "retentionLowLevelRetries", "retentionRetriesSleep", "retentionExcludeList", "retentionExtraArgs", "transferMonitorDays", "transferMonitorPriority", "jobNotifyPriority", "jobNotifyTitle", "commandList"].forEach((id) => {
+    ["jobSource", "jobDestination", "jobDestinationSubpath", "maxAge", "minAge", "jobTransfers", "jobCheckers", "jobTpslimit", "jobTpslimitBurst", "jobRetries", "jobLowLevelRetries", "jobRetriesSleep", "excludeList", "extraArgs", "archiveFilenameTemplate", "archiveDateFormat", "archiveCompressionLevel", "archiveTempDir", "archivePassword", "retentionMinAge", "retentionTransfers", "retentionCheckers", "retentionTpslimit", "retentionTpslimitBurst", "retentionRetries", "retentionLowLevelRetries", "retentionRetriesSleep", "retentionExcludeList", "retentionExtraArgs", "transferMonitorDays", "transferMonitorPriority", "jobNotifyTitle", "commandList"].forEach((id) => {
       document.getElementById(id).addEventListener("input", () => collectFormJob());
     });
     document.getElementById("excludePathInput").addEventListener("keydown", (event) => {
