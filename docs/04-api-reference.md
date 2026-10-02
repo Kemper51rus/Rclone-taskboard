@@ -230,6 +230,9 @@ Cloud settings читаются из `rclone.conf`, но приложение с
 - `backup.options.exclude_paths` поддерживает path-исключения вида `{"path": "/abs/path", "kind": "file|directory"}`; путь должен быть внутри `source_path`
 - `backup.archive` поддерживает 7z-архивацию перед отправкой в облако:
   `enabled`, `filename_template`, `date_format`, `compression_level`, `temp_dir`, `password`, `encrypt_headers`
+- `backup.directory_scan` задаёт выборочный обход каталогов (только `copy` без архива):
+  `enabled` (false), `path_template` (`%Y-%m-%d`), `lookback_days` (7, диапазон 1–3650), `timezone` (`UTC`, IANA), `full_scan_enabled` (true), `full_scan_interval_hours` (168, диапазон 1–87600), `full_scan_ignore_age` (false).
+  Маска относительная, с обязательными `%Y`, `%m`, `%d`; поддерживает вложенные компоненты и одиночные `*`. Абсолютные пути, `..`, `**`, скобки, неизвестные директивы и конфликтующие extra_args отклоняются (`400`). Отсутствующий блок оставляет прежнее поведение. Полная сверка выполняется при очередном запуске после интервала; по умолчанию сохраняет фильтры возраста. См. [руководство](02-user-guide.md#обход-каталогов-по-датам).
 - `backup.transfer_monitor` включает Gotify-мониторинг отсутствия новых передач:
   `enabled`, `stale_days`, `priority`. Backend смотрит историю успешных job-step и считает передачей шаги с `file_count > 0` или `transferred_bytes > 0`; повторное предупреждение по одной задаче отправляется не чаще раза в сутки.
 - Для backup-задач с облаком используйте `cloud_key` и `destination_subpath`; backend сам собирает итоговый `destination_path`

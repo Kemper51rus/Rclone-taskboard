@@ -10,6 +10,7 @@ from .domain import (
     BackupOptions,
     BandwidthSettings,
     CloudSettings,
+    DirectoryScanSettings,
     DEFAULT_RCLONE_ARGS,
     DEFAULT_QUEUE_DEFINITIONS,
     GotifySettings,
@@ -158,6 +159,7 @@ def job_to_storage_dict(job: JobDefinition) -> dict[str, Any]:
         "notifications": normalized.notifications.to_dict(),
         "transfer_monitor": normalized.transfer_monitor.to_dict(),
         "watcher_enabled": normalized.watcher_enabled,
+        "directory_scan": normalized.directory_scan.to_dict(),
     }
     if normalized.kind == "backup":
         item["source_path"] = normalized.source_path
@@ -242,6 +244,7 @@ def _load_job(
             options=options,
             retention=_load_retention(raw.get("retention")),
             archive=_load_archive(raw.get("archive")),
+            directory_scan=_load_directory_scan(raw.get("directory_scan")),
             notifications=_load_notifications(raw.get("notifications")),
             transfer_monitor=_load_transfer_monitor(raw.get("transfer_monitor")),
             watcher_enabled=bool(raw.get("watcher_enabled", False)),
@@ -264,6 +267,7 @@ def _load_job(
         schedule=_load_schedule(raw.get("schedule"), profile, standard_interval_minutes, heavy_hour),
         command=command,
         options=_load_command_options(raw.get("options")),
+        directory_scan=_load_directory_scan(raw.get("directory_scan")),
         notifications=_load_notifications(raw.get("notifications")),
         transfer_monitor=_load_transfer_monitor(raw.get("transfer_monitor")),
     ).validate()
@@ -423,6 +427,17 @@ def _load_retention(raw: Any) -> RetentionSettings:
         exclude=list(raw.get("exclude", [])),
         extra_args=list(raw.get("extra_args", [])),
     ).normalized()
+
+
+def _load_directory_scan(raw: Any) -> DirectoryScanSettings:
+    if raw is None:
+        return DirectoryScanSettings()
+    if not isinstance(raw, dict):
+        raise ValueError("directory_scan must be an object")
+    defaults = DirectoryScanSettings().to_dict()
+    return DirectoryScanSettings(**{
+        name: raw.get(name, value) for name, value in defaults.items()
+    }).normalized()
 
 
 def _load_archive(raw: Any) -> ArchiveSettings:
@@ -716,7 +731,10 @@ def _migrate_retention_commands(jobs: list[JobDefinition]) -> tuple[list[JobDefi
                 extra_args=retention_settings.extra_args,
             ),
             archive=backup.archive,
+            directory_scan=backup.directory_scan,
             notifications=backup.notifications,
+            transfer_monitor=backup.transfer_monitor,
+            watcher_enabled=backup.watcher_enabled,
         ).validate()
         migrated_jobs[backup_index] = migrated_backup
         backup_index_by_key[_retention_match_key(migrated_backup)] = backup_index

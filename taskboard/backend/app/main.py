@@ -21,6 +21,7 @@ from .domain import (
     BackupOptions,
     BandwidthSettings,
     CloudSettings,
+    DirectoryScanSettings,
     GotifySettings,
     JobCatalog,
     JobDefinition,
@@ -475,6 +476,16 @@ class ArchivePayload(BaseModel):
     encrypt_headers: bool = False
 
 
+class DirectoryScanPayload(BaseModel):
+    enabled: bool = False
+    path_template: str = "%Y-%m-%d"
+    lookback_days: int = 7
+    timezone: str = "UTC"
+    full_scan_enabled: bool = True
+    full_scan_interval_hours: int = 168
+    full_scan_ignore_age: bool = False
+
+
 class BackupJobPayload(BaseModel):
     key: str
     description: str | None = None
@@ -492,6 +503,7 @@ class BackupJobPayload(BaseModel):
     options: BackupOptionsPayload = Field(default_factory=BackupOptionsPayload)
     retention: RetentionPayload = Field(default_factory=RetentionPayload)
     archive: ArchivePayload = Field(default_factory=ArchivePayload)
+    directory_scan: DirectoryScanPayload = Field(default_factory=DirectoryScanPayload)
     notifications: JobNotificationPayload = Field(default_factory=JobNotificationPayload)
     transfer_monitor: TransferMonitorPayload = Field(default_factory=TransferMonitorPayload)
     watcher_enabled: bool = False
@@ -517,6 +529,7 @@ class JobPayload(BaseModel):
     options: BackupOptionsPayload = Field(default_factory=BackupOptionsPayload)
     retention: RetentionPayload = Field(default_factory=RetentionPayload)
     archive: ArchivePayload = Field(default_factory=ArchivePayload)
+    directory_scan: DirectoryScanPayload = Field(default_factory=DirectoryScanPayload)
     notifications: JobNotificationPayload = Field(default_factory=JobNotificationPayload)
     transfer_monitor: TransferMonitorPayload = Field(default_factory=TransferMonitorPayload)
     watcher_enabled: bool = False
@@ -1275,6 +1288,13 @@ def test_gotify_settings(payload: GotifyPayload) -> dict[str, Any]:
     return {"sent": True}
 
 
+def _job_definition_from_payload(**kwargs: Any) -> JobDefinition:
+    try:
+        return JobDefinition(**kwargs).validate()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.put("/api/backups", dependencies=[Depends(require_write_access)])
 def update_backups(payload: BackupCatalogPayload) -> dict[str, Any]:
     backup_jobs: list[JobDefinition] = []
@@ -1296,7 +1316,7 @@ def update_backups(payload: BackupCatalogPayload) -> dict[str, Any]:
         cloud = live_clouds.get(item.cloud_key) if item.cloud_key else None
         destination_path = _compose_cloud_destination(cloud, item.destination_subpath) or item.destination_path
         backup_jobs.append(
-            JobDefinition(
+            _job_definition_from_payload(
                 key=key,
                 order=item.order,
                 description=item.description or item.title or key,
@@ -1315,10 +1335,11 @@ def update_backups(payload: BackupCatalogPayload) -> dict[str, Any]:
                 options=BackupOptions(**item.options.model_dump()),
                 retention=RetentionSettings(**item.retention.model_dump()),
                 archive=ArchiveSettings(**item.archive.model_dump()),
+                directory_scan=DirectoryScanSettings(**item.directory_scan.model_dump()),
                 notifications=JobNotificationSettings(**item.notifications.model_dump()),
                 transfer_monitor=TransferMonitorSettings(**item.transfer_monitor.model_dump()),
                 watcher_enabled=item.watcher_enabled,
-            ).validate()
+            )
         )
 
     with catalog_lock:
@@ -1389,23 +1410,24 @@ def update_jobs(payload: JobCatalogPayload) -> dict[str, Any]:
             continue_on_error=item.continue_on_error,
             kind=item.kind,
             profile=item.profile,
+            directory_scan=DirectoryScanSettings(**item.directory_scan.model_dump()),
             schedule=ScheduleDefinition(**item.schedule.model_dump()),
             notifications=JobNotificationSettings(**item.notifications.model_dump()),
             transfer_monitor=TransferMonitorSettings(**item.transfer_monitor.model_dump()),
         )
         if item.kind == "command":
             jobs_to_save.append(
-                JobDefinition(
+                _job_definition_from_payload(
                     **common_kwargs,
                     command=[part for part in item.command if str(part).strip()],
                     options=BackupOptions(force_rclone_log=item.options.force_rclone_log),
-                ).validate()
+                )
             )
         else:
             cloud = live_clouds.get(item.cloud_key) if item.cloud_key else None
             destination_path = _compose_cloud_destination(cloud, item.destination_subpath) or item.destination_path
             jobs_to_save.append(
-                JobDefinition(
+                _job_definition_from_payload(
                     **common_kwargs,
                     source_path=item.source_path,
                     cloud_key=item.cloud_key,
@@ -1416,7 +1438,7 @@ def update_jobs(payload: JobCatalogPayload) -> dict[str, Any]:
                     retention=RetentionSettings(**item.retention.model_dump()),
                     archive=ArchiveSettings(**item.archive.model_dump()),
                     watcher_enabled=item.watcher_enabled,
-                ).validate()
+                )
             )
 
     with catalog_lock:

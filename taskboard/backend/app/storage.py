@@ -371,6 +371,16 @@ class Storage:
                 )
                 conn.commit()
 
+    def set_step_command(self, step_id: int, command: list[str]) -> None:
+        """Keep execution-time directory filters visible in run history."""
+        with self._lock:
+            with self._connect() as conn:
+                conn.execute(
+                    "UPDATE run_steps SET command_json = ? WHERE id = ?",
+                    (json.dumps(command, ensure_ascii=False), step_id),
+                )
+                conn.commit()
+
     def set_step_log_mode(self, step_id: int, log_mode: str | None) -> None:
         with self._lock:
             with self._connect() as conn:

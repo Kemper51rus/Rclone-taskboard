@@ -7,6 +7,7 @@ from pathlib import Path
 import shlex
 import threading
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 VALID_TRANSFER_MODES = {"copy", "sync"}
@@ -766,6 +767,82 @@ class TransferMonitorSettings:
 
 
 @dataclass(frozen=True)
+class DirectoryScanSettings:
+    enabled: bool = False
+    path_template: str = "%Y-%m-%d"
+    lookback_days: int = 7
+    timezone: str = "UTC"
+    full_scan_enabled: bool = True
+    full_scan_interval_hours: int = 168
+    full_scan_ignore_age: bool = False
+
+    def normalized(self) -> DirectoryScanSettings:
+        # Disabled drafts are retained, not silently corrected or validated.
+        if self.enabled:
+            template = self.path_template
+            if not isinstance(template, str) or not 1 <= len(template) <= 256:
+                raise ValueError("directory_scan.path_template must contain 1..256 characters")
+            components = template.split("/")
+            if any(component in {"", ".", ".."} for component in components):
+                raise ValueError("directory_scan.path_template must be relative without empty, . or .. components")
+            if "**" in template:
+                raise ValueError("directory_scan.path_template does not support recursive ** globs")
+            directives: set[str] = set()
+            index = 0
+            while index < len(template):
+                char = template[index]
+                if char == "%":
+                    directive = template[index:index + 2]
+                    if directive not in {"%Y", "%m", "%d"}:
+                        raise ValueError("directory_scan.path_template supports only %Y, %m and %d directives")
+                    directives.add(directive)
+                    index += 2
+                    continue
+                if not (char.isascii() and (char.isalnum() or char in "_-./*")):
+                    raise ValueError("directory_scan.path_template allows only ASCII letters, digits, _ - . / and single * globs")
+                index += 1
+            if directives != {"%Y", "%m", "%d"}:
+                raise ValueError("directory_scan.path_template requires %Y, %m and %d (daily granularity)")
+            for name, value, maximum in (
+                ("lookback_days", self.lookback_days, 3650),
+                ("full_scan_interval_hours", self.full_scan_interval_hours, 87600),
+            ):
+                if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+                    raise ValueError(f"directory_scan.{name} must be an integer in 1..{maximum}")
+            try:
+                if not isinstance(self.timezone, str):
+                    raise ValueError("invalid timezone type")
+                ZoneInfo(self.timezone)
+            except (ValueError, ZoneInfoNotFoundError, OSError) as exc:
+                raise ValueError("directory_scan.timezone must be a valid IANA timezone (for example UTC)") from exc
+        return DirectoryScanSettings(
+            enabled=bool(self.enabled),
+            path_template=self.path_template,
+            lookback_days=self.lookback_days,
+            timezone=self.timezone,
+            full_scan_enabled=bool(self.full_scan_enabled),
+            full_scan_interval_hours=self.full_scan_interval_hours,
+            full_scan_ignore_age=bool(self.full_scan_ignore_age),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self.normalized())
+
+
+def _validate_directory_scan_args(extra_args: list[str]) -> None:
+    # User-supplied selectors can override the planner's coverage boundary.
+    unsafe_flags = {
+        "--delete-excluded", "--filter", "--filter-from", "--include", "--include-from",
+        "--exclude", "--exclude-from", "--exclude-if-present", "--files-from",
+        "--files-from-raw", "--max-age", "--min-age", "--max-depth",
+        "--min-size", "--max-size", "--ignore-case",
+    }
+    for token in _split_extra_args(extra_args):
+        if token.split("=", 1)[0] in unsafe_flags or token.startswith("-f"):
+            raise ValueError("directory_scan conflicts with custom selection/deletion arguments; use structured options instead")
+
+
+@dataclass(frozen=True)
 class JobDefinition:
     key: str
     order: int
@@ -786,6 +863,7 @@ class JobDefinition:
     options: BackupOptions = field(default_factory=BackupOptions)
     retention: RetentionSettings = field(default_factory=RetentionSettings)
     archive: ArchiveSettings = field(default_factory=ArchiveSettings)
+    directory_scan: DirectoryScanSettings = field(default_factory=DirectoryScanSettings)
     notifications: JobNotificationSettings = field(default_factory=JobNotificationSettings)
     transfer_monitor: TransferMonitorSettings = field(default_factory=TransferMonitorSettings)
     watcher_enabled: bool = False
@@ -804,6 +882,11 @@ class JobDefinition:
         options = self.options.normalized()
         retention = self.retention.normalized()
         archive = self.archive.normalized()
+        directory_scan = self.directory_scan.normalized()
+        if directory_scan.enabled:
+            if kind != "backup" or self.transfer_mode != "copy" or archive.enabled:
+                raise ValueError("directory_scan is supported only for non-archive backup copy jobs; sync can delete destination files")
+            _validate_directory_scan_args(options.extra_args)
         if kind != "backup":
             archive = ArchiveSettings()
         notifications = self.notifications.normalized()
@@ -849,6 +932,7 @@ class JobDefinition:
             options=options,
             retention=retention,
             archive=archive,
+            directory_scan=directory_scan,
             notifications=notifications,
             transfer_monitor=transfer_monitor,
             watcher_enabled=watcher_enabled,

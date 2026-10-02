@@ -2332,6 +2332,50 @@
           </div>
 
 
+          <details class="panel editor-collapsible" id="directoryScanBlock" style="margin-top:16px; margin-bottom:0;">
+            <summary>
+              <h3>Сканирование каталогов по дате</h3>
+            </summary>
+            <div class="editor-collapsible-body">
+              <div class="editor-grid">
+                <div class="field full">
+                  <button type="button" class="toggle-chip" id="directoryScanEnabled" aria-pressed="false">Сканировать только недавние каталоги</button>
+                  <div class="field-meta">Только для копирования без архивации: даты в именах каталогов ограничивают обход источника. Настройки применяются к copy, но не к очистке (retention).</div>
+                  <div class="field-meta" id="directoryScanWarning" role="status" style="color:var(--warn);" hidden></div>
+                </div>
+                <div class="field full">
+                  <label for="directoryScanPathTemplate" class="ui-tooltip has-tooltip" data-tooltip="Относительный rclone glob от исходного каталога. Обязательны %Y, %m и %d; Допускаются вложенные каталоги, одиночные * и символы ASCII: буквы, цифры, _, -, точка, /. Длина 1–256 символов. Запрещены пробелы, ?, абсолютные пути, пустые части пути, части . и .., скобки и **." tabindex="0">Шаблон пути с датой ⓘ</label>
+                  <input id="directoryScanPathTemplate" placeholder="%Y-%m-%d" aria-describedby="directoryScanTemplateHelp directoryScanPreview" />
+                  <div class="field-meta" id="directoryScanTemplateHelp">Примеры: %Y-%m-%d, %Y/%m/%d, cameras/*/%Y-%m-%d.</div>
+                </div>
+                <div class="field">
+                  <label for="directoryScanLookbackDays">Глубина сканирования, дней по 24 часа</label>
+                  <input id="directoryScanLookbackDays" type="number" min="1" max="3650" step="1" value="7" />
+                  <div class="field-meta">От текущего момента назад на указанное число × 24 часа. Включаются все календарные даты между границами в выбранном часовом поясе: обычно дней + 1, при переходах летнего времени число может отличаться.</div>
+                </div>
+                <div class="field">
+                  <label for="directoryScanTimezone" class="ui-tooltip has-tooltip" data-tooltip="Часовой пояс определяет текущую дату и границы окна. Используйте UTC или имя IANA, например Europe/Moscow." tabindex="0">Часовой пояс ⓘ</label>
+                  <input id="directoryScanTimezone" placeholder="UTC" value="UTC" />
+                </div>
+                <div class="field full">
+                  <div class="field-meta" id="directoryScanPreview" role="status" aria-live="polite"></div>
+                </div>
+                <div class="field full">
+                  <button type="button" class="toggle-chip" id="directoryScanFullEnabled" aria-pressed="true">Периодически сканировать весь источник</button>
+                  <div class="field-meta">Первый запуск использует оптимизированный обход и задаёт точку отсчёта. Полный обход выполняется при следующем обычном запуске после истечения интервала, а не по отдельному расписанию.</div>
+                </div>
+                <div class="field">
+                  <label for="directoryScanFullIntervalHours">Интервал полного обхода, часов</label>
+                  <input id="directoryScanFullIntervalHours" type="number" min="1" max="87600" step="1" value="168" />
+                </div>
+                <div class="field full">
+                  <button type="button" class="toggle-chip" id="directoryScanFullIgnoreAge" aria-pressed="false">Игнорировать min-age / max-age при полном обходе</button>
+                  <div class="field-meta">По умолчанию существующие фильтры возраста соблюдаются даже при полном обходе. Этот переключатель убирает только min-age и max-age во время полных запусков; остальные фильтры и retention не меняются.</div>
+                </div>
+              </div>
+            </div>
+          </details>
+
           <details class="panel editor-collapsible" style="margin-top:16px; margin-bottom:0;" data-job-kind="backup">
             <summary>
               <h3>Архивация 7z</h3>
@@ -6268,6 +6312,96 @@
       };
     }
 
+    function directoryScanSupported() {
+      return selectedJobKind() === "backup" && selectedTransferMode() === "copy" && !isTogglePressed("archiveEnabled");
+    }
+
+    function collectDirectoryScanSettings() {
+      return {
+        // Keep the editor preference when switching modes; never enable an unsupported payload.
+        enabled: directoryScanSupported() && isTogglePressed("directoryScanEnabled"),
+        path_template: formValue("directoryScanPathTemplate"),
+        lookback_days: Number(formValue("directoryScanLookbackDays")),
+        timezone: formValue("directoryScanTimezone"),
+        full_scan_enabled: isTogglePressed("directoryScanFullEnabled"),
+        full_scan_interval_hours: Number(formValue("directoryScanFullIntervalHours")),
+        full_scan_ignore_age: isTogglePressed("directoryScanFullIgnoreAge"),
+      };
+    }
+
+    function fillDirectoryScanSettings(scan = {}) {
+      setTogglePressed("directoryScanEnabled", scan.enabled ?? false);
+      document.getElementById("directoryScanPathTemplate").value = scan.path_template ?? "%Y-%m-%d";
+      document.getElementById("directoryScanLookbackDays").value = scan.lookback_days ?? 7;
+      document.getElementById("directoryScanTimezone").value = scan.timezone ?? "UTC";
+      setTogglePressed("directoryScanFullEnabled", scan.full_scan_enabled ?? true);
+      document.getElementById("directoryScanFullIntervalHours").value = scan.full_scan_interval_hours ?? 168;
+      setTogglePressed("directoryScanFullIgnoreAge", scan.full_scan_ignore_age ?? false);
+    }
+
+    function directoryScanValidationError(scan) {
+      const template = String(scan.path_template ?? "");
+      if (!template || template.startsWith("/") || template.includes("\\") || template.includes(":") || template.length > 256 || template.split("/").some((part) => ["", ".", ".."].includes(part)) || /[{}\[\]\x00-\x1f]/.test(template) || template.includes("**")) {
+        return "Шаблон должен быть относительным, длиной 1–256 символов: без пустых частей пути, частей . и .., скобок, обратного слеша и **.";
+      }
+      if (!["%Y", "%m", "%d"].every((token) => template.includes(token)) || /%(?![Ymd])/.test(template)) {
+        return "Шаблон каталогов должен содержать %Y, %m и %d; другие токены даты не поддерживаются.";
+      }
+      if (!/^[A-Za-z0-9_.\/*-]*$/.test(template.replace(/%[Ymd]/g, ""))) {
+        return "Шаблон допускает только ASCII-буквы, цифры, _, -, точку, / и одиночные *; пробелы и ? запрещены.";
+      }
+      if (!Number.isInteger(scan.lookback_days) || scan.lookback_days < 1 || scan.lookback_days > 3650) {
+        return "Окно дат должно быть целым числом от 1 до 3650 дней.";
+      }
+      if (!Number.isInteger(scan.full_scan_interval_hours) || scan.full_scan_interval_hours < 1 || scan.full_scan_interval_hours > 87600) {
+        return "Интервал полного обхода должен быть целым числом от 1 до 87600 часов.";
+      }
+      try {
+        if (!scan.timezone || !/^[A-Za-z_]+(?:\/[A-Za-z0-9_+\-]+)*$/.test(scan.timezone)) throw new Error("timezone");
+        new Intl.DateTimeFormat("en-US", { timeZone: scan.timezone }).format();
+      } catch (_) {
+        return "Укажите UTC или существующий часовой пояс IANA, например Europe/Moscow.";
+      }
+      return "";
+    }
+
+    function updateDirectoryScanUI() {
+      const supported = directoryScanSupported();
+      const enabled = isTogglePressed("directoryScanEnabled");
+      const fullEnabled = isTogglePressed("directoryScanFullEnabled");
+      document.querySelectorAll("#directoryScanBlock input, #directoryScanBlock button").forEach((node) => {
+        node.disabled = !supported || (node.id !== "directoryScanEnabled" && !enabled)
+          || (["directoryScanFullIntervalHours", "directoryScanFullIgnoreAge"].includes(node.id) && !fullEnabled);
+      });
+      const warning = document.getElementById("directoryScanWarning");
+      warning.hidden = supported;
+      warning.textContent = supported ? "" : "Недоступно для синхронизации, архивации и команд. Значения сохранены в редакторе; при сохранении задачи сканирование будет выключено.";
+      const scan = collectDirectoryScanSettings();
+      const error = directoryScanValidationError(scan);
+      const preview = document.getElementById("directoryScanPreview");
+      preview.classList.toggle("field-meta-error", Boolean(error) && scan.enabled);
+      if (error) {
+        preview.textContent = scan.enabled ? error : "Сканирование выключено. Черновик настроек сохранён; проверка выполняется при включении.";
+        return;
+      }
+      const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: scan.timezone, year: "numeric", month: "2-digit", day: "2-digit",
+      });
+      const dateInZone = (instant) => {
+        const parts = Object.fromEntries(formatter.formatToParts(instant).map((part) => [part.type, part.value]));
+        return new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)));
+      };
+      const now = new Date();
+      const today = dateInZone(now);
+      // Match backend: subtract elapsed 24-hour days before converting both endpoints to civil dates.
+      const first = dateInZone(new Date(now.getTime() - scan.lookback_days * 86400000));
+      const dateCount = Math.round((today.getTime() - first.getTime()) / 86400000) + 1;
+      const pathFor = (date) => scan.path_template.replaceAll("%Y", String(date.getUTCFullYear()).padStart(4, "0"))
+        .replaceAll("%m", String(date.getUTCMonth() + 1).padStart(2, "0"))
+        .replaceAll("%d", String(date.getUTCDate()).padStart(2, "0"));
+      preview.textContent = `Пример окна (${scan.timezone}): ${pathFor(first)}${dateCount > 1 ? ` … ${pathFor(today)}` : ""}. Все календарные даты между границами включительно (${dateCount}); начало — ${scan.lookback_days} × 24 часа назад. Это маски путей, а не проверка наличия каталогов.`;
+    }
+
     function fillArchiveSettings(archive = {}) {
       setTogglePressed("archiveEnabled", archive.enabled ?? false);
       document.getElementById("archiveFilenameTemplate").value = archive.filename_template || "{key}-{date}.7z";
@@ -6574,6 +6708,7 @@
         options: collectJobRcloneOptions(kind),
         retention: collectRetentionRcloneOptions(kind),
         archive: collectArchiveSettings(kind),
+        directory_scan: collectDirectoryScanSettings(),
         notifications: {
           on_success: isTogglePressed("jobNotifySuccess"),
           on_failure: isTogglePressed("jobNotifyFailure"),
@@ -6590,6 +6725,7 @@
       const destinationPreview = document.getElementById("jobDestinationPreview");
       if (destinationPreview) destinationPreview.value = destinationPath || "";
       renderMailruOptionsHint(job);
+      updateDirectoryScanUI();
       document.getElementById("commandPreview").value = commandPreview(job);
       return job;
     }
@@ -6660,6 +6796,7 @@
       });
       fillJobRcloneOptions(job?.options || {});
       fillArchiveSettings(job?.archive || {});
+      fillDirectoryScanSettings(job?.directory_scan || {});
       setTogglePressed("jobWatcherEnabled", job?.watcher_enabled ?? false);
       setTogglePressed("transferMonitorEnabled", job?.transfer_monitor?.enabled ?? false);
       document.getElementById("transferMonitorDays").value = job?.transfer_monitor?.stale_days ?? 2;
@@ -6789,6 +6926,13 @@
     }
 
     function validateJob(job) {
+      if (job.directory_scan?.enabled) {
+        const scanError = directoryScanValidationError(job.directory_scan);
+        if (scanError) throw new Error(scanError);
+        if (job.directory_scan.enabled && (job.kind !== "backup" || job.transfer_mode !== "copy" || job.archive?.enabled)) {
+          throw new Error("Сканирование каталогов по дате доступно только для копирования без архивации.");
+        }
+      }
       if (!job.key) throw new Error("Нужен ключ задачи");
       if (!job.title) throw new Error("Нужен заголовок");
       if (!queueDefinitions().some((item) => item.key === job.profile && item.enabled !== false)) {
@@ -7369,6 +7513,7 @@
         node.style.display = showRetention ? "" : "none";
       });
       renderMailruOptionsHint();
+      updateDirectoryScanUI();
       if (state.creatingNewJob && !state.keyEditedManually) {
         syncKeyFromTitle(true);
       }
@@ -7685,6 +7830,12 @@
 
     ["jobSource", "jobDestination", "jobDestinationSubpath", "maxAge", "minAge", "jobTransfers", "jobCheckers", "jobTpslimit", "jobTpslimitBurst", "jobRetries", "jobLowLevelRetries", "jobRetriesSleep", "excludeList", "extraArgs", "archiveFilenameTemplate", "archiveDateFormat", "archiveCompressionLevel", "archiveTempDir", "archivePassword", "retentionMinAge", "retentionTransfers", "retentionCheckers", "retentionTpslimit", "retentionTpslimitBurst", "retentionRetries", "retentionLowLevelRetries", "retentionRetriesSleep", "retentionExcludeList", "retentionExtraArgs", "transferMonitorDays", "transferMonitorPriority", "jobNotifyTitle", "commandList"].forEach((id) => {
       document.getElementById(id).addEventListener("input", () => collectFormJob());
+    });
+    ["directoryScanPathTemplate", "directoryScanLookbackDays", "directoryScanTimezone", "directoryScanFullIntervalHours"].forEach((id) => {
+      document.getElementById(id).addEventListener("input", () => collectFormJob());
+    });
+    ["directoryScanEnabled", "directoryScanFullEnabled", "directoryScanFullIgnoreAge"].forEach((id) => {
+      bindToggleChip(id, () => collectFormJob());
     });
     document.getElementById("excludePathInput").addEventListener("keydown", (event) => {
       if (event.key === "Enter") {

@@ -20,6 +20,7 @@ from .domain import (
     path_is_excluded_from_backup,
     path_is_within,
 )
+from .directory_scan import DirectoryScanPlan, build_scan_plan, state_key_for_job
 from .gotify import GotifyClient
 from .locks import file_lock
 from .rclone_metrics import (
@@ -27,7 +28,7 @@ from .rclone_metrics import (
     parse_data_size_to_bytes,
     read_latest_log_progress,
 )
-from .runner import CommandRunner
+from .runner import CommandResult, CommandRunner
 from .storage import Storage
 
 
@@ -560,6 +561,7 @@ class Orchestrator:
         run_started = False
 
         for step in steps:
+            scan_plan: DirectoryScanPlan | None = None
             step_id = int(step["id"])
             if self._step_needs_copy_gate(step):
                 if not run_started:
@@ -586,8 +588,9 @@ class Orchestrator:
                     log_mode = self._step_rclone_log_mode(step)
                     self.storage.set_step_log_mode(step_id, log_mode)
 
+                    scan_plan = self._prepare_directory_scan(step)
                     command = self._bind_step_rclone_log(
-                        command=list(step.get("command", [])),
+                        command=scan_plan.command if scan_plan else list(step.get("command", [])),
                         run_id=run_id,
                         step_id=step_id,
                         log_mode=log_mode,
@@ -604,6 +607,10 @@ class Orchestrator:
                     )
             except InterruptedError:
                 return
+            except ValueError as exc:
+                # Invalid execution-time selection must fail closed, not silently
+                # fall back to an expensive/unrestricted run or leave it open.
+                result = CommandResult("failed", None, "", str(exc), 0.0)
 
             self.storage.mark_step_finished(
                 step_id=step_id,
@@ -619,6 +626,8 @@ class Orchestrator:
                     stderr_tail=result.stderr_tail,
                 ),
             )
+            if scan_plan and scan_plan.mode == "full" and result.status == "succeeded" and not self.runner.dry_run:
+                self.storage.set_state(scan_plan.state_key, datetime.now(timezone.utc).isoformat())
             self._update_job_auto_rclone_log_state(step=step, status=result.status)
             self._notify_for_step(run=run, step=step, result=result)
 
@@ -643,6 +652,26 @@ class Orchestrator:
             summary=summary,
             error_count=error_count,
         )
+
+    def _prepare_directory_scan(self, step: dict[str, Any]) -> DirectoryScanPlan | None:
+        if step.get("step_kind") != "job":
+            return None
+        job = self.catalog.get_job(str(step.get("job_key", "")))
+        if not job or not job.directory_scan.enabled:
+            return None
+        now = datetime.now(timezone.utc)
+        state_key = state_key_for_job(job)
+        stored_anchor = self.storage.get_state(state_key)
+        plan = build_scan_plan(job, list(step.get("command", [])), now=now, anchor_at=stored_anchor)
+        if stored_anchor != plan.anchor_at and not self.runner.dry_run:
+            self.storage.set_state(state_key, plan.anchor_at)
+        self.storage.set_step_command(int(step["id"]), plan.command)
+        self.storage.update_step_progress(int(step["id"]), {"directory_scan": plan.to_dict()})
+        self.storage.append_event("directory_scan_started", {
+            "run_id": step["run_id"], "step_id": step["id"],
+            "job_key": job.key, **plan.to_dict(),
+        })
+        return plan
 
     def _notify_for_step(self, run: dict[str, Any], step: dict[str, Any], result: Any) -> None:
         if step.get("step_kind") != "job":
