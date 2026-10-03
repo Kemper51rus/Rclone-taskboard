@@ -733,6 +733,23 @@ class Storage:
             steps.append(payload)
         return steps
 
+    def recent_successful_retention_steps(self, job_key: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Read compatible historical cleanup baselines without touching live state."""
+        with self._lock:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    """SELECT step_kind, status, started_at, finished_at, command_json, stdout_tail
+                       FROM run_steps WHERE job_key = ? AND step_kind = 'retention'
+                       AND status = 'succeeded' ORDER BY id DESC LIMIT ?""",
+                    (job_key, max(1, min(100, limit))),
+                ).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            item["command"] = json.loads(item.pop("command_json") or "[]")
+            items.append(item)
+        return items
+
     def list_open_run_steps(self) -> list[dict[str, Any]]:
         with self._lock:
             with self._connect() as conn:

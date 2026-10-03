@@ -426,6 +426,9 @@ def _load_retention(raw: Any) -> RetentionSettings:
         mailru_safe_preset=bool(raw.get("mailru_safe_preset", False)),
         exclude=list(raw.get("exclude", [])),
         extra_args=list(raw.get("extra_args", [])),
+        interval_enabled=bool(raw.get("interval_enabled", False)),
+        interval_hours=raw.get("interval_hours", 24),
+        directory_scan=raw.get("directory_scan", {}),
     ).normalized()
 
 
@@ -729,6 +732,9 @@ def _migrate_retention_commands(jobs: list[JobDefinition]) -> tuple[list[JobDefi
                 min_age=retention_settings.min_age,
                 exclude=retention_settings.exclude,
                 extra_args=retention_settings.extra_args,
+                interval_enabled=backup.retention.interval_enabled,
+                interval_hours=backup.retention.interval_hours,
+                directory_scan=backup.retention.directory_scan,
             ),
             archive=backup.archive,
             directory_scan=backup.directory_scan,

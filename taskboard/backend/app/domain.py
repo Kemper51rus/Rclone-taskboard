@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from fnmatch import fnmatchcase
 from pathlib import Path
+import re
 import shlex
 import threading
 from typing import Any
@@ -442,6 +444,66 @@ class BackupOptions:
         return args
 
 
+def parse_retention_age(value: str | None) -> timedelta:
+    """Parse a positive elapsed duration, never an absolute/undefined age.
+
+    Masked cleanup computes calendar cutoffs from this value; accepting rclone's
+    absolute dates or special duration values here would make selection unsafe.
+    """
+    message = "retention.min_age must be a positive duration using s, m, h, d or w"
+    if not isinstance(value, str):
+        raise ValueError(message)
+    raw = value.strip()
+    factors = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+    matches = list(re.finditer(r"(\d+(?:\.\d*)?|\.\d+)([smhdw])", raw))
+    if not matches or "".join(match.group() for match in matches) != raw:
+        raise ValueError(message)
+    try:
+        seconds = sum((Decimal(match[1]) * factors[match[2]] for match in matches), Decimal(0))
+        if seconds <= 0:
+            raise ValueError(message)
+        duration = timedelta(seconds=float(seconds))
+        if duration <= timedelta(0):
+            raise ValueError(message)
+        return duration
+    except (InvalidOperation, OverflowError) as exc:
+        raise ValueError(message) from exc
+
+
+@dataclass(frozen=True)
+class RetentionDirectoryScanSettings:
+    enabled: bool = False
+    path_template: str = "%Y-%m-%d"
+    timezone: str = "UTC"
+    overlap_days: int = 1
+    full_scan_enabled: bool = True
+    full_scan_interval_hours: int = 168
+
+    def normalized(self, *, active: bool | None = None) -> RetentionDirectoryScanSettings:
+        if self.enabled and active is not False:
+            try:
+                # One shared validator keeps copying and cleanup masks identical.
+                DirectoryScanSettings(
+                    enabled=True, path_template=self.path_template, timezone=self.timezone,
+                    lookback_days=1, full_scan_enabled=self.full_scan_enabled,
+                    # Inactive period drafts do not block saving the active mask.
+                    full_scan_interval_hours=self.full_scan_interval_hours if self.full_scan_enabled else 168,
+                ).normalized()
+            except ValueError as exc:
+                raise ValueError(str(exc).replace("directory_scan.", "retention.directory_scan.")) from exc
+            if isinstance(self.overlap_days, bool) or not isinstance(self.overlap_days, int) or not 0 <= self.overlap_days <= 3650:
+                raise ValueError("retention.directory_scan.overlap_days must be an integer in 0..3650")
+        return RetentionDirectoryScanSettings(
+            enabled=bool(self.enabled), path_template=self.path_template,
+            timezone=self.timezone, overlap_days=self.overlap_days,
+            full_scan_enabled=bool(self.full_scan_enabled),
+            full_scan_interval_hours=self.full_scan_interval_hours,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self.normalized())
+
+
 @dataclass(frozen=True)
 class RetentionSettings:
     enabled: bool = False
@@ -459,8 +521,31 @@ class RetentionSettings:
     mailru_safe_preset: bool = False
     exclude: list[str] = field(default_factory=list)
     extra_args: list[str] = field(default_factory=list)
+    interval_enabled: bool = False
+    interval_hours: int = 24
+    directory_scan: RetentionDirectoryScanSettings = field(default_factory=RetentionDirectoryScanSettings)
 
     def normalized(self) -> RetentionSettings:
+        scan = self.directory_scan
+        if isinstance(scan, dict):
+            try:
+                scan = RetentionDirectoryScanSettings(**scan)
+            except TypeError as exc:
+                raise ValueError("retention.directory_scan must contain supported settings") from exc
+        if not isinstance(scan, RetentionDirectoryScanSettings):
+            raise ValueError("retention.directory_scan must be an object")
+        scan = scan.normalized(active=bool(self.enabled))
+        if self.enabled and self.interval_enabled:
+            if isinstance(self.interval_hours, bool) or not isinstance(self.interval_hours, int) or not 1 <= self.interval_hours <= 87600:
+                raise ValueError("retention.interval_hours must be an integer in 1..87600")
+        if self.enabled and scan.enabled:
+            parse_retention_age(self.min_age)
+            try:
+                _validate_directory_scan_args(self.extra_args)
+            except ValueError as exc:
+                raise ValueError("retention.directory_scan conflicts with custom selection/deletion arguments; use structured options instead") from exc
+            if any(token.split("=", 1)[0] == "--rmdirs" for token in _split_extra_args(self.extra_args)):
+                raise ValueError("retention.directory_scan does not support --rmdirs")
         return RetentionSettings(
             enabled=bool(self.enabled) and bool((self.min_age or "").strip()),
             min_age=(self.min_age or "").strip() or None,
@@ -477,6 +562,9 @@ class RetentionSettings:
             mailru_safe_preset=bool(self.mailru_safe_preset),
             exclude=[str(item).strip() for item in self.exclude if str(item).strip()],
             extra_args=[str(item).strip() for item in self.extra_args if str(item).strip()],
+            interval_enabled=bool(self.interval_enabled),
+            interval_hours=self.interval_hours,
+            directory_scan=scan,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -881,6 +969,8 @@ class JobDefinition:
         schedule = self.schedule.validate()
         options = self.options.normalized()
         retention = self.retention.normalized()
+        if retention.enabled and retention.directory_scan.enabled and (kind != "backup" or self.transfer_mode != "copy"):
+            raise ValueError("retention.directory_scan is supported only for backup copy jobs")
         archive = self.archive.normalized()
         directory_scan = self.directory_scan.normalized()
         if directory_scan.enabled:

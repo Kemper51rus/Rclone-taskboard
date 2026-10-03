@@ -101,6 +101,14 @@ def parse_rclone_output_progress_line(line: str) -> dict[str, Any] | None:
     if not compact:
         return None
 
+    if compact.startswith("Checks:"):
+        listed = re.search(r"\bListed\s+(\d+)", compact)
+        if listed:
+            return {"raw_line": compact, "listed_count": int(listed.group(1))}
+    deleted = re.match(r"Deleted:\s*(\d+)\s*\(files\)", compact)
+    if deleted:
+        return {"raw_line": compact, "deleted_count": int(deleted.group(1))}
+
     match = RCLONE_OUTPUT_TRANSFER_FILES_RE.match(compact)
     if match:
         return {

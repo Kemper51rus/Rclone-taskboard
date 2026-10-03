@@ -226,6 +226,10 @@ Cloud settings читаются из `rclone.conf`, но приложение с
 - `backup.options` и `retention` поддерживают structured `rclone`-поля:
   `transfers`, `checkers`, `tpslimit`, `tpslimit_burst`, `retries`, `low_level_retries`,
   `retries_sleep`, `fast_list`, `no_traverse`, `debug_dump`, `mailru_safe_preset`, `exclude`, `extra_args`
+- `retention.interval_enabled` (false) и `retention.interval_hours` (24, 1–87600) ограничивают частоту очистки. Отсутствие новых полей сохраняет прежний запуск после каждого успешного копирования.
+- `retention.directory_scan` содержит `enabled` (false), `path_template` (`%Y-%m-%d`), `timezone` (`UTC`), `overlap_days` (1, 0–3650), `full_scan_enabled` (true), `full_scan_interval_hours` (168, 1–87600). Выборочное удаление ограничивается недавно истёкшими датами; `min_age` должен быть положительной длительностью s/m/h/d/w. Сохраняются исходные `min-age` и исключения, включая полные контрольные обходы. Активный режим доступен для backup/copy; конфликтующие custom-фильтры/возраст/`rmdirs` отклоняются (400).
+- Читаемые задачи дополнительно содержат `retention_status`: `enabled`, `interval_enabled`, `last_success_at`, `last_cleanup_started_at`, `last_full_scan_at`, `next_due_at`. Это runtime-аннотация, не часть сохраняемой конфигурации.
+- Retention-шаг до наступления срока получает `status=skipped`, `progress.retention_policy.mode=skip_interval`, `reason`, `next_due_at`; общий запуск остаётся успешным. Очистка после неуспешного копирования также пропускается. `active_operations` содержит `phase_label`, `copy_completed`, `retention_policy`, `listed_count`, `deleted_count` для раздельного отображения очистки и передачи.
 - `backup.options.force_rclone_log` принудительно включает step-лог `rclone` для конкретной backup-задачи без включения глобального логирования
 - `backup.options.exclude_paths` поддерживает path-исключения вида `{"path": "/abs/path", "kind": "file|directory"}`; путь должен быть внутри `source_path`
 - `backup.archive` поддерживает 7z-архивацию перед отправкой в облако:

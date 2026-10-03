@@ -2137,7 +2137,7 @@
     <section class="panel copy-progress-panel" id="copyProgressPanel">
       <div class="panel-header">
         <div>
-          <h3>Прогресс копирования</h3>
+          <h3>Копирование и очистка</h3>
         </div>
       </div>
       <div class="copy-progress-list" id="copyProgressList"></div>
@@ -2517,12 +2517,55 @@
             </summary>
             <div class="editor-collapsible-body">
               <div class="editor-grid">
-              <div class="field">
-                <button type="button" class="toggle-chip" id="retentionEnabled" aria-pressed="false">Включить очистку после успешного backup</button>
+              <div class="field full">
+                <button type="button" class="toggle-chip" id="retentionEnabled" aria-pressed="false">Включить очистку в облаке</button>
+                <div class="field-meta">Очистка — отдельный этап после копирования. Период ниже позволяет не выполнять её при каждом запуске задачи.</div>
               </div>
               <div class="field">
                 <label for="retentionMinAge">Удалять в облаке старше</label>
                 <input id="retentionMinAge" placeholder="30d" />
+              </div>
+              <div class="field full" id="retentionPolicyControls">
+                <div class="editor-grid">
+                  <div class="field full">
+                    <button type="button" class="toggle-chip" id="retentionIntervalEnabled" aria-pressed="false">Ограничить частоту очистки</button>
+                    <div class="field-meta">Интервал отсчитывается от успешной очистки. По истечении периода очистка выполняется при очередном запуске задачи, а не отдельным таймером.</div>
+                  </div>
+                  <div class="field">
+                    <label for="retentionIntervalHours">Интервал очистки, часов</label>
+                    <input id="retentionIntervalHours" type="number" min="1" max="87600" step="1" value="24" />
+                  </div>
+                  <div class="field full">
+                    <button type="button" class="toggle-chip" id="retentionDirectoryScanEnabled" aria-pressed="false">Обходить только недавно устаревшие каталоги</button>
+                    <div class="field-meta">Это обратный выбор дат: маска та же, что при копировании, но старые даты вычисляются автоматически по возрасту удаления. Свежие каталоги из окна копирования сюда не переносятся.</div>
+                  </div>
+                  <div class="field full">
+                    <label for="retentionDirectoryScanPathTemplate" class="ui-tooltip has-tooltip" data-tooltip="Относительный путь с обязательными %Y, %m, %d. Вложенные папки и одиночные * допустимы; правила шаблона те же, что у копирования." tabindex="0">Шаблон датированных каталогов ⓘ</label>
+                    <input id="retentionDirectoryScanPathTemplate" placeholder="%Y-%m-%d" value="%Y-%m-%d" />
+                    <div class="field-meta">Примеры: %Y-%m-%d, %Y/%m/%d, cameras/*/%Y-%m-%d.</div>
+                  </div>
+                  <div class="field">
+                    <label for="retentionDirectoryScanTimezone">Часовой пояс дат каталогов</label>
+                    <input id="retentionDirectoryScanTimezone" placeholder="UTC" value="UTC" />
+                  </div>
+                  <div class="field">
+                    <label for="retentionDirectoryScanOverlapDays" class="ui-tooltip has-tooltip" data-tooltip="Дополнительные календарные дни перед началом окна для повторной проверки недавно устаревших веток. Не отменяет min-age." tabindex="0">Перекрытие окна, дней ⓘ</label>
+                    <input id="retentionDirectoryScanOverlapDays" type="number" min="0" max="3650" step="1" value="1" />
+                  </div>
+                  <div class="field full">
+                    <button type="button" class="toggle-chip" id="retentionDirectoryScanFullEnabled" aria-pressed="true">Периодически проверять всё облачное дерево</button>
+                    <div class="field-meta">Без совместимой истории сначала выполняется полный обход. Затем проверяются даты от предыдущей успешной очистки минус возраст удаления до текущего момента минус этот возраст, включая перекрытие и граничные дни. Поздние файлы за пределами окна дождутся полного обхода.</div>
+                  </div>
+                  <div class="field">
+                    <label for="retentionDirectoryScanFullIntervalHours">Интервал полного обхода, часов</label>
+                    <input id="retentionDirectoryScanFullIntervalHours" type="number" min="1" max="87600" step="1" value="168" />
+                  </div>
+                  <div class="field full">
+                    <div class="field-meta">При любом обходе сохраняются min-age и исключения. Используется удаление отдельных подходящих файлов, не purge каталогов. Для выбора дат возраст должен быть положительной длительностью с единицами s/m/h/d/w, например 7d или 1w2d12h; даты, ms, месяцы и годы не поддерживаются.</div>
+                    <div class="field-meta" id="retentionPolicyHint" role="status" aria-live="polite"></div>
+                    <div class="field-meta" id="retentionPolicyRuntimeStatus" role="status" aria-live="polite"></div>
+                  </div>
+                </div>
               </div>
               <div class="field">
                 <label for="retentionTransfers">transfers</label>
@@ -3732,11 +3775,76 @@
       return `Антибот: ${formatCountdown(secondsLeft)}`;
     }
 
+    function cleanupOperationLabel(operation) {
+      if (operation?.phase_label) return String(operation.phase_label);
+      if (operation?.operation_label) return String(operation.operation_label);
+      return operation?.copy_completed === true ? "Копирование завершено • очистка облака" : "Очистка облака";
+    }
+
+    function isCleanupOperationActive(operation) {
+      return operation?.step_kind === "retention" && (["running", "paused"].includes(operation.status)
+        || (operation.status === "queued" && operation.copy_completed === true));
+    }
+
+    function retentionOperationForRun(runId) {
+      return (state.lastSnapshot?.active_operations || []).find((item) => isCleanupOperationActive(item)
+        && Number(item.run_id) === Number(runId)) || null;
+    }
+
+    function retentionPolicyProgressLabel(policy) {
+      if (!policy) return "";
+      if (policy.next_due_at && (["skip_interval", "interval", "interval_not_due", "not_due", "skipped"].includes(policy.mode)
+        || ["interval", "interval_not_due", "not_due", "skipped"].includes(policy.reason))) {
+        return `Очистка отложена до ${formatRunTimestamp(policy.next_due_at)}`;
+      }
+      if (policy.mode === "full") return "Полный обход облачного дерева";
+      if (policy.mode === "window") return "Выборочный обход устаревших каталогов";
+      return policy.reason_label || "";
+    }
+
+    function cleanupProgressSummary(operation) {
+      const progress = operation?.progress || operation || {};
+      const parts = [];
+      const policy = progress.retention_policy || operation?.retention_policy;
+      const policyLabel = retentionPolicyProgressLabel(policy);
+      if (policyLabel) parts.push(policyLabel);
+      const listed = progress.listed_count ?? operation?.listed_count;
+      const deleted = progress.deleted_count ?? operation?.deleted_count;
+      if (listed != null && Number.isFinite(Number(listed))) parts.push(`Просмотрено элементов: ${formatCompactNumber(Number(listed))}`);
+      if (deleted != null && Number.isFinite(Number(deleted))) parts.push(`Удалено файлов: ${formatCompactNumber(Number(deleted))}`);
+      if (!parts.length) parts.push("Обход облачных каталогов и удаление файлов старше min-age. Это не передача данных.");
+      return parts.join(" • ");
+    }
+
+    function cleanupProgressCard(operation) {
+      const status = formatRunStatusLabel(operation.status);
+      const subtitle = [`run #${formatRunDisplayId(operation.run_id)}`, operation.profile].filter(Boolean).join(" • ");
+      return `<article class="copy-progress-item">
+        <div class="copy-progress-head"><div>
+          <div class="copy-progress-title">${escapeHtml(operation.title || operation.job_key || "Очистка")}</div>
+          <div class="copy-progress-subtitle">${escapeHtml(subtitle)}</div>
+        </div><div class="pill ${operation.status === "running" ? "ok" : "warn"}">${escapeHtml(status)}</div></div>
+        <div class="copy-progress-meta"><strong>${escapeHtml(cleanupOperationLabel(operation))}</strong></div>
+        <div class="copy-progress-meta"><span>${escapeHtml(cleanupProgressSummary(operation))}</span></div>
+        <div class="copy-progress-actions">
+          <button type="button" class="secondary" onclick="controlCopyStep(${Number(operation.step_id)}, 'pause')" ${operation.status === "running" ? "" : "disabled"}>Пауза</button>
+          <button type="button" class="secondary" onclick="controlCopyStep(${Number(operation.step_id)}, 'resume')" ${operation.status === "paused" ? "" : "disabled"}>Плей</button>
+          <button type="button" class="ghost" onclick="controlCopyStep(${Number(operation.step_id)}, 'stop')" ${["running", "paused", "queued"].includes(operation.status) ? "" : "disabled"}>Стоп</button>
+        </div>
+      </article>`;
+    }
+
     function renderCopyProgress(items, activeOperations = []) {
       const container = document.getElementById("copyProgressList");
       if (!container) return;
+      const cleanupItems = activeOperations.filter(isCleanupOperationActive);
+      // Cleanup has no transfer percentage; never display a bogus 0 B/0 B bar.
+      items = items.filter((item) => item.step_kind !== "retention");
+      const cleanupMarkup = cleanupItems.map(cleanupProgressCard).join("");
       if (!items.length) {
-        const fallback = activeOperations.find((item) => item.status === "running" || item.status === "paused" || item.status === "queued");
+        if (cleanupMarkup) { container.innerHTML = cleanupMarkup; return; }
+        const fallback = activeOperations.find((item) => ["running", "paused", "queued"].includes(item.status)
+          && (item.step_kind !== "retention" || isCleanupOperationActive(item)));
         if (fallback) {
           const kindLabel = fallback.step_kind === "retention"
             ? "Сейчас выполняется retention-этап, активного копирования нет."
@@ -3753,7 +3861,7 @@
         const fillStyle = percent === null ? "" : `style="width:${percent}%"`;
         const statusLabel = item.status === "paused" ? "paused" : (item.status === "running" ? "running" : "queued");
         const subtitle = [`run #${formatRunDisplayId(item.run_id)}`, item.profile, item.transfer_mode].filter(Boolean).join(" • ");
-        const meta = copyProgressSummary(item);
+        const meta = [item.operation_label, copyProgressSummary(item)].filter(Boolean).join(" • ");
         const resourceSummary = copyResourceSummary(item);
         const antiBotDelay = item.delayed_by_antibot ? antiBotDelayLabel(state.lastSnapshot?.next_copy_start_at) : "";
         const progressValue = formatProgressPercent(percent);
@@ -3786,7 +3894,7 @@
             </div>
           </article>
         `;
-      }).join("");
+      }).join("") + cleanupMarkup;
     }
 
     function refreshCopyProgressCountdowns() {
@@ -5423,6 +5531,8 @@
       const summary = runHistorySummary(run);
       const stats = formatRunTransferStats(run);
       const parts = [];
+      const cleanup = retentionOperationForRun(run?.id);
+      if (cleanup) parts.push(`Этап: ${cleanupOperationLabel(cleanup)}`);
       const errors = Number(run?.error_count);
       const completed = Number(run?.completed_steps);
       const total = Number(run?.total_steps);
@@ -5479,7 +5589,8 @@
     }
 
     function runHistorySummaryLabel(run) {
-      return runHistorySummary(run) || formatRunTransferStatsCompact(run) || "";
+      const cleanup = ["running", "paused"].includes(run?.status) ? retentionOperationForRun(run?.id) : null;
+      return cleanup ? cleanupOperationLabel(cleanup) : (runHistorySummary(run) || formatRunTransferStatsCompact(run) || "");
     }
 
     function runHistoryTriggerTagLabel(run) {
@@ -5501,7 +5612,8 @@
         id: run?.id,
         displayId: formatRunDisplayId(run?.id),
         status: String(run?.status || ""),
-        statusLabel: formatRunStatusLabel(run?.status),
+        statusLabel: ["running", "paused"].includes(run?.status) && retentionOperationForRun(run?.id)
+          ? "очистка" : formatRunStatusLabel(run?.status),
         jobKey: run?.job_key || "—",
         requestedAt: formatRunHistoryTimestamp(run?.requested_at),
         summary: runHistorySummaryLabel(run),
@@ -5524,7 +5636,8 @@
       }
       body.innerHTML = runs.map((run) => {
         const tooltip = runHistorySummaryTooltip(run);
-        const stats = formatRunTransferStatsCompact(run);
+        const cleanup = ["running", "paused"].includes(run.status) ? retentionOperationForRun(run.id) : null;
+        const stats = cleanup ? cleanupOperationLabel(cleanup) : formatRunTransferStatsCompact(run);
         const logStepId = runHistoryLogStepId(run);
         const statusAttrs = logStepId
           ? ` class="${statusClass(run.status)} run-status-log-cell" role="button" tabindex="0" title="Открыть лог" onclick="openRunSummaryLog(event, ${logStepId})" onkeydown="handleRunSummaryLogKeydown(event, ${logStepId})"`
@@ -5951,6 +6064,12 @@
       refreshCustomSelect(select);
     }
 
+    function jobCleanupLabel(job) {
+      const operation = (state.lastSnapshot?.active_operations || []).find((item) => item.job_key === job.key
+        && isCleanupOperationActive(item));
+      return operation ? cleanupOperationLabel(operation) : "";
+    }
+
     function renderJobs() {
       const container = document.getElementById("jobsGrid");
       if (!state.jobs.length) {
@@ -5968,7 +6087,8 @@
           </div>
           <div class="pill-row">
             <div class="pill ${lastRunPillClass(job)}">${job.last_run_started_at || job.last_run_requested_at ? `${escapeHtml(formatMetricTimestamp(job.last_run_started_at || job.last_run_requested_at))}` : "не запускалась"}</div>
-            ${job.kind === "backup" && job.retention?.enabled && job.retention?.min_age ? `<div class="pill pill-retention">retention ${escapeHtml(job.retention.min_age)}</div>` : ""}
+            ${jobCleanupLabel(job) ? `<div class="pill pill-retention">${escapeHtml(jobCleanupLabel(job))}</div>` : ""}
+            ${job.kind === "backup" && job.retention?.enabled && job.retention?.min_age ? `<div class="pill pill-retention">очистка &gt; ${escapeHtml(job.retention.min_age)}${job.retention.interval_enabled ? ` • каждые ${escapeHtml(job.retention.interval_hours)} ч` : ""}</div>` : ""}
             ${job.kind !== "backup" ? `<div class="pill">команда</div>` : ""}
             ${job.kind === "backup" ? `<div class="pill">${job.transfer_mode}</div>` : ""}
             ${job.kind === "backup" && job.watcher_enabled ? `<div class="pill">watcher</div>` : ""}
@@ -6278,6 +6398,9 @@
       return {
         enabled: isBackup && selectedTransferMode() !== "sync" ? isTogglePressed("retentionEnabled") : false,
         min_age: isBackup ? (formValue("retentionMinAge") || null) : null,
+        interval_enabled: isTogglePressed("retentionIntervalEnabled"),
+        interval_hours: Number(formValue("retentionIntervalHours")),
+        directory_scan: collectRetentionDirectoryScanSettings(),
         transfers: isBackup ? normalizeOptionalInteger(formValue("retentionTransfers"), 1) : null,
         checkers: isBackup ? normalizeOptionalInteger(formValue("retentionCheckers"), 1) : null,
         tpslimit: isBackup ? normalizeOptionalFloat(formValue("retentionTpslimit"), 0) : null,
@@ -6296,6 +6419,108 @@
           ? formValue("retentionExtraArgs").split("\n").map((item) => item.trim()).filter(Boolean)
           : [],
       };
+    }
+
+    function retentionPolicySupported() {
+      return selectedJobKind() === "backup" && selectedTransferMode() !== "sync";
+    }
+
+    function collectRetentionDirectoryScanSettings() {
+      return {
+        enabled: isTogglePressed("retentionDirectoryScanEnabled"),
+        path_template: formValue("retentionDirectoryScanPathTemplate"),
+        timezone: formValue("retentionDirectoryScanTimezone"),
+        overlap_days: Number(formValue("retentionDirectoryScanOverlapDays")),
+        full_scan_enabled: isTogglePressed("retentionDirectoryScanFullEnabled"),
+        full_scan_interval_hours: Number(formValue("retentionDirectoryScanFullIntervalHours")),
+      };
+    }
+
+    function fillRetentionPolicySettings(retention = {}) {
+      setTogglePressed("retentionIntervalEnabled", retention.interval_enabled ?? false);
+      document.getElementById("retentionIntervalHours").value = retention.interval_hours ?? 24;
+      const scan = retention.directory_scan || {};
+      setTogglePressed("retentionDirectoryScanEnabled", scan.enabled ?? false);
+      document.getElementById("retentionDirectoryScanPathTemplate").value = scan.path_template ?? "%Y-%m-%d";
+      document.getElementById("retentionDirectoryScanTimezone").value = scan.timezone ?? "UTC";
+      document.getElementById("retentionDirectoryScanOverlapDays").value = scan.overlap_days ?? 1;
+      setTogglePressed("retentionDirectoryScanFullEnabled", scan.full_scan_enabled ?? true);
+      document.getElementById("retentionDirectoryScanFullIntervalHours").value = scan.full_scan_interval_hours ?? 168;
+    }
+
+    function parseRetentionAgeSeconds(value) {
+      const text = String(value || "").trim();
+      const units = { s: 1, m: 60, h: 3600, d: 86400, w: 604800 };
+      const pattern = /(?:\d+(?:\.\d*)?|\.\d+)[smhdw]/g;
+      const parts = text.match(pattern) || [];
+      if (!text || parts.join("") !== text) return null;
+      const seconds = parts.reduce((total, part) => total + Number(part.slice(0, -1)) * units[part.slice(-1)], 0);
+      return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+    }
+
+    function retentionPolicyValidationError(retention) {
+      if (!retention?.enabled) return "";
+      if (retention.interval_enabled && (!Number.isInteger(retention.interval_hours) || retention.interval_hours < 1 || retention.interval_hours > 87600)) {
+        return "Интервал очистки должен быть целым числом от 1 до 87600 часов.";
+      }
+      const scan = retention.directory_scan || {};
+      if (!scan.enabled) return "";
+      // Reuse the exact copy template/timezone validator without a copy window.
+      const templateError = directoryScanValidationError({
+        path_template: scan.path_template, timezone: scan.timezone,
+        lookback_days: 1, full_scan_interval_hours: 1,
+      });
+      if (templateError) return `Очистка в облаке: ${templateError}`;
+      if (!Number.isInteger(scan.overlap_days) || scan.overlap_days < 0 || scan.overlap_days > 3650) {
+        return "Перекрытие окна очистки должно быть целым числом от 0 до 3650 дней.";
+      }
+      if (scan.full_scan_enabled && (!Number.isInteger(scan.full_scan_interval_hours) || scan.full_scan_interval_hours < 1 || scan.full_scan_interval_hours > 87600)) {
+        return "Интервал полного обхода облака должен быть целым числом от 1 до 87600 часов.";
+      }
+      if (parseRetentionAgeSeconds(retention.min_age) === null) {
+        return "Для выбора старых каталогов нужен положительный min-age с единицами s/m/h/d/w, например 7d или 1w2d12h. Даты, ms, месяцы и годы не поддерживаются.";
+      }
+      return "";
+    }
+
+    function updateRetentionPolicyUI() {
+      const supported = retentionPolicySupported();
+      const active = supported && isTogglePressed("retentionEnabled");
+      const interval = isTogglePressed("retentionIntervalEnabled");
+      const scan = isTogglePressed("retentionDirectoryScanEnabled");
+      const full = isTogglePressed("retentionDirectoryScanFullEnabled");
+      document.querySelectorAll("#retentionPolicyControls input, #retentionPolicyControls button").forEach((node) => {
+        node.disabled = !active
+          || (node.id === "retentionIntervalHours" && !interval)
+          || (node.id.startsWith("retentionDirectoryScan") && node.id !== "retentionDirectoryScanEnabled" && !scan)
+          || (node.id === "retentionDirectoryScanFullIntervalHours" && !full);
+      });
+      const hint = document.getElementById("retentionPolicyHint");
+      const retention = collectRetentionRcloneOptions(selectedJobKind());
+      const error = active ? retentionPolicyValidationError(retention) : "";
+      hint.textContent = error || (!active ? "Параметры сохранены в форме; применятся после включения очистки для backup/copy."
+        : scan ? "Окно устаревших дат выбирается автоматически. Свежие файлы защищены min-age даже в старых папках."
+          : "Ограничение по датам выключено: очистка обходит всё облачное дерево.");
+      hint.style.color = error ? "var(--warn)" : "";
+      renderRetentionPolicyRuntimeStatus();
+    }
+
+    function retentionPolicyScheduleLabel(status) {
+      if (!status) return "";
+      const parts = [];
+      if (status.last_success_at) parts.push(`Последняя успешная очистка: ${formatRunTimestamp(status.last_success_at)}`);
+      if (status.next_due_at) parts.push(new Date(status.next_due_at).getTime() > Date.now()
+        ? `Очистка отложена до ${formatRunTimestamp(status.next_due_at)}; выполнится при очередном запуске задачи.`
+        : `Срок очистки наступил (${formatRunTimestamp(status.next_due_at)}); выполнится при очередном запуске задачи.`);
+      if (status.last_full_scan_at) parts.push(`Последний полный обход: ${formatRunTimestamp(status.last_full_scan_at)}`);
+      return parts.join(" • ");
+    }
+
+    function renderRetentionPolicyRuntimeStatus() {
+      const node = document.getElementById("retentionPolicyRuntimeStatus");
+      if (!node) return;
+      const job = state.jobs.find((item) => item.key === state.editingKey);
+      node.textContent = retentionPolicyScheduleLabel(job?.retention_status);
     }
 
     function collectArchiveSettings(kind) {
@@ -6438,6 +6663,7 @@
     }
 
     function fillRetentionRcloneOptions(retention = {}) {
+      fillRetentionPolicySettings(retention);
       setTogglePressed("retentionEnabled", retention.enabled ?? false);
       document.getElementById("retentionMinAge").value = retention.min_age || "";
       document.getElementById("retentionTransfers").value = retention.transfers ?? "";
@@ -6952,6 +7178,11 @@
         if (job.retention?.enabled && !job.retention?.min_age) {
           throw new Error("Для очистки в облаке нужно указать возраст, например 30d");
         }
+        if (job.retention?.enabled) {
+          if (job.transfer_mode === "sync") throw new Error("Очистка в облаке недоступна для sync.");
+          const retentionError = retentionPolicyValidationError(job.retention);
+          if (retentionError) throw new Error(retentionError);
+        }
         if (job.transfer_monitor?.enabled && Number(job.transfer_monitor.stale_days || 0) < 1) {
           throw new Error("Для мониторинга передач нужен период минимум 1 день");
         }
@@ -7424,7 +7655,8 @@
     }
 
     function formatRunStepDetails(step) {
-      const stats = formatRunTransferStats(step);
+      const cleanup = step.step_kind === "retention";
+      const stats = cleanup ? cleanupProgressSummary(step) : formatRunTransferStats(step);
       const lines = [
         `run step #${step.step_order} / ${step.job_key}`,
         `status: ${step.status}`,
@@ -7436,6 +7668,12 @@
         `started_at: ${step.started_at || "-"}`,
         `finished_at: ${step.finished_at || "-"}`,
       ];
+      const cleanupPolicy = step.progress?.retention_policy || step.retention_policy;
+      if (cleanup && cleanupPolicy) {
+        const policyLabel = retentionPolicyProgressLabel(cleanupPolicy);
+        if (policyLabel) lines.push(`cleanup: ${policyLabel}`);
+        if (cleanupPolicy.reason) lines.push(`cleanup_reason: ${cleanupPolicy.reason}`);
+      }
       if (Array.isArray(step.command) && step.command.length) {
         lines.push("", "command:", step.command.join(" "));
       }
@@ -7514,6 +7752,7 @@
       });
       renderMailruOptionsHint();
       updateDirectoryScanUI();
+      updateRetentionPolicyUI();
       if (state.creatingNewJob && !state.keyEditedManually) {
         syncKeyFromTitle(true);
       }
@@ -7722,6 +7961,7 @@
     function applyLatestJobRuns(snapshot, { rerender = true } = {}) {
       if (Array.isArray(state.jobs) && state.jobs.length) {
         const latestJobRuns = snapshot.latest_job_runs || {};
+        const runtimeJobs = Array.isArray(snapshot.backup_jobs) ? snapshot.backup_jobs : [];
         let changed = false;
         state.jobs = state.jobs.map((job) => {
           const latestRun = latestJobRuns[job.key] || null;
@@ -7731,6 +7971,8 @@
             last_run_status: latestRun?.status || null,
             last_run_started_at: latestRun?.started_at || null,
             last_run_requested_at: latestRun?.requested_at || null,
+            last_run_phase: jobCleanupLabel(job),
+            retention_status: runtimeJobs.find((item) => item.key === job.key)?.retention_status || job.retention_status,
           };
           if (
             !changed
@@ -7739,6 +7981,8 @@
               || job.last_run_started_at !== nextJob.last_run_started_at
               || job.last_run_requested_at !== nextJob.last_run_requested_at
               || (job.last_run?.run_id || null) !== (nextJob.last_run?.run_id || null)
+              || job.last_run_phase !== nextJob.last_run_phase
+              || JSON.stringify(job.retention_status || null) !== JSON.stringify(nextJob.retention_status || null)
             )
           ) {
             changed = true;
@@ -7757,6 +8001,7 @@
       state.lastSnapshot = snapshot;
       state.system = snapshot.system || state.system;
       applyLatestJobRuns(snapshot);
+      renderRetentionPolicyRuntimeStatus();
       state.watcherRuntime = snapshot.watcher || state.watcherRuntime;
       renderStatus(snapshot);
       renderCopyProgress(snapshot.copy_progress || [], snapshot.active_operations || []);
@@ -7884,7 +8129,13 @@
     });
 
     ["retentionEnabled", "archiveEnabled", "archiveEncryptHeaders", "jobNotifySuccess", "jobNotifyFailure", "jobWatcherEnabled", "transferMonitorEnabled", "jobMailruSafePreset", "jobFastList", "jobNoTraverse", "jobForceRcloneLog", "commandForceRcloneLog", "retentionMailruSafePreset", "retentionFastList", "retentionNoTraverse"].forEach((id) => {
-      bindToggleChip(id, () => collectFormJob());
+      bindToggleChip(id, () => { updateRetentionPolicyUI(); collectFormJob(); });
+    });
+    ["retentionIntervalEnabled", "retentionDirectoryScanEnabled", "retentionDirectoryScanFullEnabled"].forEach((id) => {
+      bindToggleChip(id, () => { updateRetentionPolicyUI(); collectFormJob(); });
+    });
+    ["retentionIntervalHours", "retentionDirectoryScanPathTemplate", "retentionDirectoryScanTimezone", "retentionDirectoryScanOverlapDays", "retentionDirectoryScanFullIntervalHours", "retentionMinAge"].forEach((id) => {
+      document.getElementById(id).addEventListener("input", () => { updateRetentionPolicyUI(); collectFormJob(); });
     });
 
     bindToggleChip("gotifyEnabled");

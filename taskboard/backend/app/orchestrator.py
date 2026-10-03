@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
+import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 import logging
 from pathlib import Path
@@ -27,6 +29,10 @@ from .rclone_metrics import (
     extract_transfer_metrics,
     parse_data_size_to_bytes,
     read_latest_log_progress,
+)
+from .retention_policy import (
+    RetentionPlan, build_retention_plan, command_is_dry_run, compatible_full_cleanup,
+    decode_state, policy_status, retention_state_key, successful_state, timestamp,
 )
 from .runner import CommandResult, CommandRunner
 from .storage import Storage
@@ -559,9 +565,11 @@ class Orchestrator:
         error_count = 0
         failed_jobs: list[str] = []
         run_started = False
+        successful_jobs: set[str] = set()
 
         for step in steps:
             scan_plan: DirectoryScanPlan | None = None
+            retention_plan: RetentionPlan | None = None
             step_id = int(step["id"])
             if self._step_needs_copy_gate(step):
                 if not run_started:
@@ -585,26 +593,33 @@ class Orchestrator:
                         self.storage.mark_run_running(run_id)
                         run_started = True
                     self.storage.mark_step_running(step_id)
-                    log_mode = self._step_rclone_log_mode(step)
-                    self.storage.set_step_log_mode(step_id, log_mode)
-
-                    scan_plan = self._prepare_directory_scan(step)
-                    command = self._bind_step_rclone_log(
-                        command=scan_plan.command if scan_plan else list(step.get("command", [])),
-                        run_id=run_id,
-                        step_id=step_id,
-                        log_mode=log_mode,
-                    )
-                    timeout_seconds = int(step.get("timeout_seconds") or self.settings.default_timeout_seconds)
-                    result = self.runner.run(
-                        command=command,
-                        timeout_seconds=timeout_seconds,
-                        on_progress=lambda progress, current_step_id=step_id: self.storage.update_step_progress(
-                            current_step_id,
-                            progress,
-                        ),
-                        control_id=step_id,
-                    )
+                    if step.get("step_kind") == "retention":
+                        retention_plan = self._prepare_retention(step, str(step.get("job_key")) in successful_jobs)
+                    if retention_plan and retention_plan.skipped:
+                        result = CommandResult("skipped", None, retention_plan.reason, "", 0.0)
+                    else:
+                        log_mode = self._step_rclone_log_mode(step)
+                        self.storage.set_step_log_mode(step_id, log_mode)
+                        scan_plan = self._prepare_directory_scan(step)
+                        selected_command = (retention_plan.command if retention_plan else
+                                            scan_plan.command if scan_plan else list(step.get("command", [])))
+                        command = self._bind_step_rclone_log(
+                            command=selected_command, run_id=run_id, step_id=step_id, log_mode=log_mode,
+                        )
+                        timeout_seconds = int(step.get("timeout_seconds") or self.settings.default_timeout_seconds)
+                        result = self.runner.run(
+                            command=command, timeout_seconds=timeout_seconds,
+                            on_progress=lambda progress, current_step_id=step_id: self.storage.update_step_progress(
+                                current_step_id, progress,
+                            ),
+                            control_id=step_id,
+                        )
+                        # Update before releasing the per-job cleanup lock, so
+                        # parallel workers cannot both consider the interval due.
+                        if retention_plan and result.status == "succeeded" and not self.runner.dry_run and not command_is_dry_run(command):
+                            previous = decode_state(self.storage.get_state(retention_plan.state_key))
+                            updated = successful_state(retention_plan, previous, datetime.now(timezone.utc))
+                            self.storage.set_state(retention_plan.state_key, json.dumps(updated))
             except InterruptedError:
                 return
             except ValueError as exc:
@@ -626,13 +641,15 @@ class Orchestrator:
                     stderr_tail=result.stderr_tail,
                 ),
             )
-            if scan_plan and scan_plan.mode == "full" and result.status == "succeeded" and not self.runner.dry_run:
+            if scan_plan and scan_plan.mode == "full" and result.status == "succeeded" and not self.runner.dry_run and not command_is_dry_run(command):
                 self.storage.set_state(scan_plan.state_key, datetime.now(timezone.utc).isoformat())
             self._update_job_auto_rclone_log_state(step=step, status=result.status)
             self._notify_for_step(run=run, step=step, result=result)
 
+            if step.get("step_kind") == "job" and result.status == "succeeded" and not command_is_dry_run(command):
+                successful_jobs.add(str(step.get("job_key")))
             completed_steps += 1
-            if result.status != "succeeded":
+            if result.status not in {"succeeded", "skipped"}:
                 error_count += 1
                 failed_jobs.append(str(step.get("job_key", "unknown")))
                 if not bool(step.get("continue_on_error", 0)):
@@ -670,6 +687,41 @@ class Orchestrator:
         self.storage.append_event("directory_scan_started", {
             "run_id": step["run_id"], "step_id": step["id"],
             "job_key": job.key, **plan.to_dict(),
+        })
+        return plan
+
+    def _retention_state(self, job: JobDefinition) -> dict[str, Any]:
+        key = retention_state_key(job)
+        stored = self.storage.get_state(key)
+        if stored is not None:
+            return decode_state(stored)
+        if not job.retention.enabled:
+            return {}
+        for candidate in self.storage.recent_successful_retention_steps(job.key):
+            baseline = compatible_full_cleanup(job, candidate)
+            if baseline and timestamp(baseline["last_success_at"]) <= datetime.now(timezone.utc):
+                return baseline
+        return {}
+
+    def retention_status(self, job_key: str) -> dict[str, Any] | None:
+        job = self.catalog.get_job(job_key)
+        if not job or job.kind != "backup":
+            return None
+        return policy_status(job, self._retention_state(job))
+
+    def _prepare_retention(self, step: dict[str, Any], copy_succeeded: bool) -> RetentionPlan:
+        job = self.catalog.get_job(str(step.get("job_key", "")))
+        if not job:
+            raise ValueError("retention job no longer exists")
+        state = self._retention_state(job)
+        plan = build_retention_plan(job, list(step.get("command", [])), now=datetime.now(timezone.utc),
+                                    state=state, copy_succeeded=copy_succeeded)
+        if state and not self.runner.dry_run and self.storage.get_state(plan.state_key) is None:
+            self.storage.set_state(plan.state_key, json.dumps(state))
+        self.storage.set_step_command(int(step["id"]), plan.command)
+        self.storage.update_step_progress(int(step["id"]), {"retention_policy": plan.to_dict()})
+        self.storage.append_event("retention_policy_selected", {
+            "run_id": step["run_id"], "step_id": step["id"], "job_key": job.key, **plan.to_dict(),
         })
         return plan
 
@@ -836,6 +888,16 @@ class Orchestrator:
         for step in self.storage.list_open_run_steps():
             job = self.catalog.get_job(str(step.get("job_key", "")))
             title = job.title or job.description or job.key if job else str(step.get("job_key", "job"))
+            is_retention = step.get("step_kind") == "retention"
+            copy_completed = is_retention and any(
+                item.get("step_kind") == "job" and item.get("job_key") == step.get("job_key")
+                and item.get("status") == "succeeded"
+                for item in self.storage.list_run_steps(int(step["run_id"]))
+            )
+            progress = step.get("progress") or {}
+            phase_label = (("Копирование завершено • очистка облака" if copy_completed else "Очистка облака")
+                           if is_retention else "Архивация и отправка" if job and job.archive.enabled
+                           else "Копирование" if job and job.kind == "backup" else "Выполнение команды")
             items.append(
                 {
                     "step_id": step["id"],
@@ -843,6 +905,11 @@ class Orchestrator:
                     "job_key": step.get("job_key"),
                     "title": title,
                     "step_kind": step.get("step_kind"),
+                    "phase_label": phase_label,
+                    "copy_completed": copy_completed,
+                    "retention_policy": progress.get("retention_policy") if is_retention else None,
+                    "listed_count": progress.get("listed_count") if is_retention else None,
+                    "deleted_count": progress.get("deleted_count") if is_retention else None,
                     "status": "paused" if self.runner.is_paused(int(step["id"])) else step.get("status"),
                     "profile": step.get("run_profile"),
                     "trigger_type": step.get("run_trigger_type"),
@@ -958,14 +1025,20 @@ class Orchestrator:
         run = self.storage.get_run(run_id)
         return not run or str(run.get("status") or "") not in {"queued", "running"}
 
+    @contextmanager
     def _step_execution_context(self, run_id: int, step: dict[str, Any]) -> Any:
         lock_path = self._step_provider_lock_path(step)
-        if lock_path is None:
-            return nullcontext()
-        return file_lock(
-            lock_path,
-            should_abort=lambda: self._run_wait_aborted(run_id),
-        )
+        provider_context = (file_lock(lock_path, should_abort=lambda: self._run_wait_aborted(run_id))
+                            if lock_path is not None else nullcontext())
+        cleanup_context = nullcontext()
+        if step.get("step_kind") == "retention":
+            job_hash = hashlib.sha256(str(step.get("job_key", "")).encode()).hexdigest()[:24]
+            cleanup_context = file_lock(
+                self.settings.app_root / "data" / "locks" / f"retention-{job_hash}.lock",
+                should_abort=lambda: self._run_wait_aborted(run_id),
+            )
+        with provider_context, cleanup_context:
+            yield
 
     def _update_job_auto_rclone_log_state(self, step: dict[str, Any], status: str) -> None:
         if step.get("step_kind") != "job":

@@ -448,6 +448,15 @@ class TransferMonitorPayload(BaseModel):
     priority: int | None = Field(default=None, ge=1, le=10)
 
 
+class RetentionDirectoryScanPayload(BaseModel):
+    enabled: bool = False
+    path_template: str = "%Y-%m-%d"
+    timezone: str = "UTC"
+    overlap_days: int = 1
+    full_scan_enabled: bool = True
+    full_scan_interval_hours: int = 168
+
+
 class RetentionPayload(BaseModel):
     enabled: bool = False
     min_age: str | None = None
@@ -464,6 +473,9 @@ class RetentionPayload(BaseModel):
     mailru_safe_preset: bool = False
     exclude: list[str] = Field(default_factory=list)
     extra_args: list[str] = Field(default_factory=list)
+    interval_enabled: bool = False
+    interval_hours: int = 24
+    directory_scan: RetentionDirectoryScanPayload = Field(default_factory=RetentionDirectoryScanPayload)
 
 
 class ArchivePayload(BaseModel):
@@ -770,13 +782,20 @@ def homepage_snapshot() -> dict[str, Any]:
     return _homepage_snapshot()
 
 
+def _jobs_with_retention_status(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for item in items:
+        if item.get("kind") == "backup":
+            item["retention_status"] = orchestrator.retention_status(str(item.get("key", "")))
+    return items
+
+
 @app.get("/api/state")
 def state() -> dict[str, Any]:
     snapshot = orchestrator.snapshot()
     snapshot["token_required"] = bool(settings.api_token)
     snapshot["latest_runs"] = storage.list_runs(limit=999)
     snapshot["latest_job_runs"] = storage.latest_job_run_map()
-    snapshot["backup_jobs"] = catalog.list_backup_jobs()
+    snapshot["backup_jobs"] = _jobs_with_retention_status(catalog.list_backup_jobs())
     snapshot["watcher"] = event_watcher.snapshot()
     snapshot["system"] = _system_diagnostics()
     return snapshot
@@ -809,7 +828,7 @@ def vacuum_database() -> dict[str, Any]:
 def jobs() -> dict[str, Any]:
     clouds = _refresh_catalog_clouds_from_rclone()
     latest_runs_by_job = storage.latest_job_run_map()
-    jobs_payload = catalog.list_jobs()
+    jobs_payload = _jobs_with_retention_status(catalog.list_jobs())
     for item in jobs_payload:
         latest_run = latest_runs_by_job.get(str(item.get("key", "")), {})
         item["last_run"] = latest_run or None
@@ -835,7 +854,7 @@ def jobs() -> dict[str, Any]:
         "watcher": catalog.watcher.to_dict(),
         "clouds": [cloud.to_dict() for cloud in clouds],
         "jobs": jobs_payload,
-        "backup_jobs": catalog.list_backup_jobs(),
+        "backup_jobs": _jobs_with_retention_status(catalog.list_backup_jobs()),
         "command_jobs": catalog.list_command_jobs(),
     }
 
@@ -1399,6 +1418,8 @@ def update_jobs(payload: JobCatalogPayload) -> dict[str, Any]:
         seen_keys.add(key)
         if item.kind == "backup" and item.retention.enabled and not (item.retention.min_age or "").strip():
             raise HTTPException(status_code=400, detail=f"backup '{key}' retention requires min_age")
+        if item.kind != "backup" and item.retention.enabled and item.retention.directory_scan.enabled:
+            raise HTTPException(status_code=400, detail="retention.directory_scan is supported only for backup copy jobs")
 
         common_kwargs = dict(
             key=key,
