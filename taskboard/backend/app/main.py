@@ -37,6 +37,7 @@ from .domain import (
 from .gotify import GotifyClient
 from .jobs_loader import build_profiles, load_catalog, save_catalog
 from .orchestrator import Orchestrator
+from .jobs_overlap import download_overlaps
 from .rclone_metrics import extract_transfer_metrics
 from .runner import CommandRunner
 from .storage import Storage
@@ -506,11 +507,14 @@ class BackupJobPayload(BaseModel):
     enabled: bool = True
     timeout_seconds: int = 1800
     continue_on_error: bool = True
-    source_path: str
+    source_path: str | None = None
     cloud_key: str | None = None
     destination_subpath: str | None = None
-    destination_path: str
+    destination_path: str | None = None
     transfer_mode: str = "copy"
+    transfer_direction: str = "upload"
+    source_subpath: str | None = None
+    destination_mount: str | None = None
     schedule: SchedulePayload = Field(default_factory=SchedulePayload)
     options: BackupOptionsPayload = Field(default_factory=BackupOptionsPayload)
     retention: RetentionPayload = Field(default_factory=RetentionPayload)
@@ -536,6 +540,9 @@ class JobPayload(BaseModel):
     destination_subpath: str | None = None
     destination_path: str | None = None
     transfer_mode: str = "copy"
+    transfer_direction: str = "upload"
+    source_subpath: str | None = None
+    destination_mount: str | None = None
     command: list[str] = Field(default_factory=list)
     schedule: SchedulePayload = Field(default_factory=SchedulePayload)
     options: BackupOptionsPayload = Field(default_factory=BackupOptionsPayload)
@@ -783,9 +790,16 @@ def homepage_snapshot() -> dict[str, Any]:
 
 
 def _jobs_with_retention_status(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    all_jobs = None
     for item in items:
         if item.get("kind") == "backup":
-            item["retention_status"] = orchestrator.retention_status(str(item.get("key", "")))
+            key = str(item.get("key", ""))
+            item["retention_status"] = orchestrator.retention_status(key)
+            if item.get("transfer_direction") == "download":
+                if all_jobs is None:
+                    all_jobs = catalog.raw_jobs()
+                job = catalog.get_job(key)
+                item["download_overlaps"] = download_overlaps(job, all_jobs) if job else []
     return items
 
 
@@ -1333,7 +1347,16 @@ def update_backups(payload: BackupCatalogPayload) -> dict[str, Any]:
             raise HTTPException(status_code=400, detail=f"backup '{key}' retention requires min_age")
         seen_keys.add(key)
         cloud = live_clouds.get(item.cloud_key) if item.cloud_key else None
-        destination_path = _compose_cloud_destination(cloud, item.destination_subpath) or item.destination_path
+        if item.cloud_key and cloud is None:
+            raise HTTPException(status_code=400, detail=f"unknown cloud '{item.cloud_key}'")
+        if (item.transfer_direction or "").strip().lower() == "download":
+            source_path = _compose_cloud_destination(cloud, item.source_subpath) or item.source_path
+            if cloud and source_path and source_path.endswith(":"):
+                source_path += "/"
+            destination_path = item.destination_path
+        else:
+            source_path = item.source_path
+            destination_path = _compose_cloud_destination(cloud, item.destination_subpath) or item.destination_path
         backup_jobs.append(
             _job_definition_from_payload(
                 key=key,
@@ -1346,11 +1369,14 @@ def update_backups(payload: BackupCatalogPayload) -> dict[str, Any]:
                 kind="backup",
                 profile=item.profile,
                 schedule=ScheduleDefinition(**item.schedule.model_dump()),
-                source_path=item.source_path,
+                source_path=source_path,
                 cloud_key=item.cloud_key,
                 destination_subpath=item.destination_subpath,
                 destination_path=destination_path,
                 transfer_mode=item.transfer_mode,
+                transfer_direction=item.transfer_direction,
+                source_subpath=item.source_subpath,
+                destination_mount=item.destination_mount,
                 options=BackupOptions(**item.options.model_dump()),
                 retention=RetentionSettings(**item.retention.model_dump()),
                 archive=ArchiveSettings(**item.archive.model_dump()),
@@ -1431,6 +1457,7 @@ def update_jobs(payload: JobCatalogPayload) -> dict[str, Any]:
             continue_on_error=item.continue_on_error,
             kind=item.kind,
             profile=item.profile,
+            transfer_direction=item.transfer_direction,
             directory_scan=DirectoryScanSettings(**item.directory_scan.model_dump()),
             schedule=ScheduleDefinition(**item.schedule.model_dump()),
             notifications=JobNotificationSettings(**item.notifications.model_dump()),
@@ -1446,15 +1473,26 @@ def update_jobs(payload: JobCatalogPayload) -> dict[str, Any]:
             )
         else:
             cloud = live_clouds.get(item.cloud_key) if item.cloud_key else None
-            destination_path = _compose_cloud_destination(cloud, item.destination_subpath) or item.destination_path
+            if item.cloud_key and cloud is None:
+                raise HTTPException(status_code=400, detail=f"unknown cloud '{item.cloud_key}'")
+            if (item.transfer_direction or "").strip().lower() == "download":
+                source_path = _compose_cloud_destination(cloud, item.source_subpath) or item.source_path
+                if cloud and source_path and source_path.endswith(":"):
+                    source_path += "/"
+                destination_path = item.destination_path
+            else:
+                source_path = item.source_path
+                destination_path = _compose_cloud_destination(cloud, item.destination_subpath) or item.destination_path
             jobs_to_save.append(
                 _job_definition_from_payload(
                     **common_kwargs,
-                    source_path=item.source_path,
+                    source_path=source_path,
                     cloud_key=item.cloud_key,
                     destination_subpath=item.destination_subpath,
                     destination_path=destination_path,
                     transfer_mode=item.transfer_mode,
+                    source_subpath=item.source_subpath,
+                    destination_mount=item.destination_mount,
                     options=BackupOptions(**item.options.model_dump()),
                     retention=RetentionSettings(**item.retention.model_dump()),
                     archive=ArchiveSettings(**item.archive.model_dump()),
@@ -1543,14 +1581,14 @@ def browse_directories(path: str | None = None, include_files: bool = False) -> 
 
 
 @app.get("/api/clouds/browse")
-def browse_cloud_directories(cloud_key: str, path: str | None = None) -> dict[str, Any]:
+def browse_cloud_directories(cloud_key: str, path: str | None = None, include_files: bool = False) -> dict[str, Any]:
     cloud = catalog.get_cloud(cloud_key.strip())
     if not cloud or not cloud.enabled:
         raise HTTPException(status_code=404, detail="cloud not found")
     if not cloud.remote_name:
         raise HTTPException(status_code=400, detail="cloud has no rclone remote")
     try:
-        return _browse_cloud_directories(cloud, path)
+        return _browse_cloud_directories(cloud, path, include_files=include_files)
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except ValueError as exc:

@@ -223,6 +223,11 @@ Cloud settings читаются из `rclone.conf`, но приложение с
 - `PUT /api/jobs` принимает и `backup`, и `command`
 - обе операции пересобирают профили на основе актуальных очередей
 - если задача ссылается на несуществующую очередь, API возвращает `400`
+- `backup.transfer_direction`: `upload` (по умолчанию, прежние задачи) или `download`. Для download разрешён только `copy` с именованным облачным `source_path` и абсолютным локальным `destination_path`. `cloud_key` + `source_subpath` собирают облачный источник; upload сохраняет `cloud_key` + `destination_subpath`. Поле `destination_mount` задаёт необязательную локальную точку монтирования для проверки перед скачиванием. Активные archive/retention/watcher/directory_scan для download отклоняются (400), как и опасные extra_args или фильтры, обходящие исключения.
+- `backup.options.exclude_paths` для download принимает облачные абсолютные пути на том же remote и внутри источника, например `{"path":"mail:/MYSPACE/BACKUPS/Proxmox","kind":"directory"}`; они становятся закреплёнными относительными масками `/BACKUPS/Proxmox/**` без обращения к локальной файловой системе.
+- Читаемые download-задачи содержат `download_overlaps`: список `{job_key,title,enabled,cloud_path,relative_path,exclude_pattern,covered,entire_source}` пересечений с upload-назначениями, включая отключённые задачи. Это рекомендации конфигурации, не автоматическое исключение и не поиск дубликатов файлов.
+- `GET /api/clouds/browse?cloud_key=...&path=...&include_files=true` возвращает также `files[]` для выбора облачных исключений; по умолчанию остаётся прежний режим только каталогов. Пути с `..` запрещены.
+- `copy_progress` и `active_operations` включают `transfer_direction` и понятные `operation_label`/`phase_label` для скачивания; скорость остаётся общей скоростью передач.
 - `backup.options` и `retention` поддерживают structured `rclone`-поля:
   `transfers`, `checkers`, `tpslimit`, `tpslimit_burst`, `retries`, `low_level_retries`,
   `retries_sleep`, `fast_list`, `no_traverse`, `debug_dump`, `mailru_safe_preset`, `exclude`, `extra_args`

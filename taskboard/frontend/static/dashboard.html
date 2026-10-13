@@ -2244,6 +2244,14 @@
                 <option value="command">Команда</option>
               </select>
             </div>
+            <div class="field" data-job-kind="backup">
+              <label for="transferDirection">Направление передачи</label>
+              <select id="transferDirection" onchange="updateTransferDirection()">
+                <option value="upload">С диска → в облако</option>
+                <option value="download">Из облака → на диск</option>
+              </select>
+              <div class="field-meta" id="transferDirectionHint"></div>
+            </div>
 	            <div class="field">
 	              <label for="jobKey">Ключ задачи</label>
 	              <input id="jobKey" placeholder="photo_library_sync" />
@@ -2252,35 +2260,67 @@
               <label for="jobTitle">Заголовок карточки</label>
               <input id="jobTitle" placeholder="Фотоархив" />
             </div>
-	            <div class="field full" data-job-kind="backup">
-	              <label for="jobSource">Исходный каталог</label>
+	            <div class="field full" data-job-kind="backup" data-transfer-direction="upload">
+	              <label for="jobSource">Исходный каталог на диске</label>
               <div class="row">
                 <input id="jobSource" placeholder="/media/photo/library/" />
                 <button type="button" class="secondary" onclick="openBrowser('source')">Выбрать</button>
               </div>
             </div>
-            <div class="field full" data-job-kind="backup">
+            <div class="field full" data-job-kind="backup" data-transfer-direction="upload">
               <button type="button" class="toggle-chip" id="jobWatcherEnabled" aria-pressed="false">Следить watcher за исходным каталогом этой задачи</button>
               <div class="field-meta">При изменениях в исходном каталоге backend watcher сможет запускать именно эту backup-задачу.</div>
             </div>
 	            <div class="field full" data-job-kind="backup">
-	              <label for="jobCloud">Облако</label>
+	              <label for="jobCloud" id="jobCloudLabel">Облако назначения</label>
               <select id="jobCloud"></select>
             </div>
-	            <div class="field full" data-job-kind="backup" data-cloud-mode="selected">
+	            <div class="field full" data-job-kind="backup" data-cloud-mode="selected" data-transfer-direction="upload">
 	              <label for="jobDestinationSubpath">Путь внутри облака</label>
               <div class="row">
                 <input id="jobDestinationSubpath" placeholder="PHOTO/library/" />
                 <button type="button" class="secondary" onclick="openBrowser('cloud')">Выбрать</button>
               </div>
             </div>
-	            <div class="field full" data-job-kind="backup" data-cloud-mode="selected">
+	            <div class="field full" data-job-kind="backup" data-cloud-mode="selected" data-transfer-direction="upload">
 	              <label for="jobDestinationPreview">Итоговый удалённый путь</label>
               <input id="jobDestinationPreview" readonly />
             </div>
-	            <div class="field full" data-job-kind="backup" data-cloud-mode="manual">
+	            <div class="field full" data-job-kind="backup" data-cloud-mode="manual" data-transfer-direction="upload">
 	              <label for="jobDestination">Удалённый путь</label>
               <input id="jobDestination" placeholder="mail:/PHOTO/library/" />
+            </div>
+            <div class="field full" data-job-kind="backup" data-transfer-direction="download">
+              <label for="jobSourceSubpath">Исходная папка в облаке</label>
+              <div class="row">
+                <input id="jobSourceSubpath" placeholder="Пусто — корень выбранного облака" />
+                <button type="button" class="secondary" onclick="openBrowser('cloudSource')">Выбрать в облаке</button>
+              </div>
+              <div class="field-meta">Относительно корня выбранного облака. Структура внутри этой папки сохраняется на диске.</div>
+            </div>
+            <div class="field full" data-job-kind="backup" data-transfer-direction="download">
+              <label for="jobDownloadSourcePreview">Итоговый источник в облаке</label>
+              <input id="jobDownloadSourcePreview" readonly />
+            </div>
+            <div class="field full" data-job-kind="backup" data-transfer-direction="download">
+              <label for="jobDownloadDestination">Каталог назначения на диске</label>
+              <div class="row">
+                <input id="jobDownloadDestination" placeholder="/mnt/pve/hdd/downloads/" />
+                <button type="button" class="secondary" onclick="openBrowser('destination')">Выбрать на диске</button>
+              </div>
+            </div>
+            <div class="field full" data-job-kind="backup" data-transfer-direction="download">
+              <label for="jobDestinationMount" class="ui-tooltip has-tooltip" data-tooltip="Необязательная защита: backend проверяет, что указанная точка действительно смонтирована. Если диск отсутствует, задача не скачивает файлы в каталог системного диска." tabindex="0">Точка монтирования диска ⓘ</label>
+              <div class="row">
+                <input id="jobDestinationMount" placeholder="Необязательно, например /mnt/pve/hdd" />
+                <button type="button" class="secondary" onclick="openBrowser('destinationMount')">Выбрать</button>
+              </div>
+              <div class="field-meta">Назначение должно находиться внутри этой точки. Проверка выполняется перед скачиванием; пустое поле отключает дополнительную защиту.</div>
+            </div>
+            <div class="field full" data-job-kind="backup" data-transfer-direction="download" id="downloadOverlapPanel">
+              <label>Папки резервных копий в источнике</label>
+              <div class="field-meta">Если скачивать корень облака, сюда могут попасть архивы других задач, включая Proxmox. Это предупреждение, а не запрет. Исключения добавляются только по вашему выбору.</div>
+              <div id="downloadOverlapList" class="exclude-path-list"></div>
             </div>
 	            <div class="field">
 	              <label for="jobProfile">Очередь</label>
@@ -2486,7 +2526,7 @@
               </div>
               <div class="field full">
                 <label for="excludePathInput">Исключения по путям</label>
-                <div class="field-meta">Можно добавить каталог или файл внутри исходного каталога. Для каталога будет исключено всё содержимое.</div>
+                <div class="field-meta" id="excludePathHelp">Можно добавить каталог или файл внутри исходного каталога. Для каталога будет исключено всё содержимое.</div>
                 <div class="exclude-path-list" id="excludePathList"></div>
                 <div class="exclude-path-add">
                   <select id="excludePathKind">
@@ -3861,7 +3901,9 @@
         const fillStyle = percent === null ? "" : `style="width:${percent}%"`;
         const statusLabel = item.status === "paused" ? "paused" : (item.status === "running" ? "running" : "queued");
         const subtitle = [`run #${formatRunDisplayId(item.run_id)}`, item.profile, item.transfer_mode].filter(Boolean).join(" • ");
-        const meta = [item.operation_label, copyProgressSummary(item)].filter(Boolean).join(" • ");
+        const direction = item.transfer_direction || state.jobs?.find((job) => job.key === item.job_key)?.transfer_direction;
+        const operation = direction === "download" ? "Скачивание" : item.operation_label || item.phase_label;
+        const meta = [operation, copyProgressSummary(item)].filter(Boolean).join(" • ");
         const resourceSummary = copyResourceSummary(item);
         const antiBotDelay = item.delayed_by_antibot ? antiBotDelayLabel(state.lastSnapshot?.next_copy_start_at) : "";
         const progressValue = formatProgressPercent(percent);
@@ -3871,7 +3913,7 @@
             <div class="copy-progress-head">
               <div>
                 <div class="copy-progress-title">${escapeHtml(item.title || item.job_key || "backup job")}</div>
-                <div class="copy-progress-subtitle">${escapeHtml(subtitle)}</div>
+                <div class="copy-progress-subtitle">${escapeHtml(subtitle)} • <span class="pill">${direction === "download" ? "Облако → диск" : "Диск → облако"}</span></div>
               </div>
               <div class="pill ${item.status === "running" ? "ok" : "warn"}">${statusLabel}</div>
             </div>
@@ -4275,6 +4317,9 @@
     function currentFormCloud(job = null) {
       if (job?.cloud_key) {
         return findCloudByKey(job.cloud_key);
+      }
+      if (job?.transfer_direction === "download" && job?.source_path) {
+        return inferCloudByDestination(job.source_path);
       }
       if (job?.destination_path) {
         return inferCloudByDestination(job.destination_path);
@@ -6090,7 +6135,7 @@
             ${jobCleanupLabel(job) ? `<div class="pill pill-retention">${escapeHtml(jobCleanupLabel(job))}</div>` : ""}
             ${job.kind === "backup" && job.retention?.enabled && job.retention?.min_age ? `<div class="pill pill-retention">очистка &gt; ${escapeHtml(job.retention.min_age)}${job.retention.interval_enabled ? ` • каждые ${escapeHtml(job.retention.interval_hours)} ч` : ""}</div>` : ""}
             ${job.kind !== "backup" ? `<div class="pill">команда</div>` : ""}
-            ${job.kind === "backup" ? `<div class="pill">${job.transfer_mode}</div>` : ""}
+            ${job.kind === "backup" ? `<div class="pill">${escapeHtml(transferDirectionLabel(job))}</div><div class="pill">${job.transfer_mode}</div>` : ""}
             ${job.kind === "backup" && job.watcher_enabled ? `<div class="pill">watcher</div>` : ""}
             ${job.kind === "backup" && job.transfer_monitor?.enabled ? `<div class="pill">мониторинг ${escapeHtml(job.transfer_monitor.stale_days || 2)} дн.</div>` : ""}
             <div class="pill">${job.profile}</div>
@@ -6265,30 +6310,25 @@
     }
 
     function normalizeExcludePathEntry(entry) {
-      const path = normalizePosixPath(entry?.path || "");
+      const remote = remotePathParts(entry?.path);
+      const path = remote ? `${remote.remote}:${remote.path}` : normalizePosixPath(entry?.path || "");
       const kind = String(entry?.kind || "directory").trim().toLowerCase() === "file" ? "file" : "directory";
       return path ? { path, kind } : null;
     }
 
     function buildExcludePathPatterns(sourcePath, entries) {
-      const base = normalizePosixPath(sourcePath || "");
-      if (!base || !base.startsWith("/")) return [];
-      const prefix = base === "/" ? "/" : `${base}/`;
       const patterns = [];
       const seen = new Set();
+      const remoteSource = remotePathParts(sourcePath);
       (entries || []).forEach((entry) => {
         const normalized = normalizeExcludePathEntry(entry);
-        if (!normalized || !normalized.path.startsWith("/")) return;
-        if (normalized.path === base) return;
-        if (base !== "/" && !normalized.path.startsWith(prefix)) return;
-        if (base === "/" && !normalized.path.startsWith("/")) return;
-        const relative = base === "/"
-          ? normalized.path.slice(1)
-          : normalized.path.slice(prefix.length);
+        if (!normalized) return;
+        const relative = relativeSourcePath(sourcePath, normalized.path);
         if (!relative) return;
+        const escapedRelative = remoteSource ? relative.replace(/[\\*?\[\]{}]/g, (char) => `\\${char}`) : relative;
         const pattern = normalized.kind === "directory"
-          ? `${relative.replace(/\/+$/, "")}/**`
-          : relative;
+          ? `${remoteSource ? "/" : ""}${escapedRelative.replace(/\/+$/, "")}/**`
+          : `${remoteSource ? "/" : ""}${escapedRelative}`;
         if (!seen.has(pattern)) {
           seen.add(pattern);
           patterns.push(pattern);
@@ -6321,7 +6361,7 @@
     }
 
     function addExcludePathEntry(path, kind = null) {
-      const sourcePath = normalizePosixPath(formValue("jobSource"));
+      const sourcePath = selectedTransferDirection() === "download" ? currentDownloadSource() : normalizePosixPath(formValue("jobSource"));
       if (!sourcePath) {
         setToast("Сначала укажите исходный каталог задачи.", "error");
         return false;
@@ -6334,16 +6374,12 @@
         setToast("Укажите путь для исключения.", "error");
         return false;
       }
-      if (!normalized.path.startsWith("/")) {
-        setToast("Путь исключения должен быть абсолютным.", "error");
-        return false;
-      }
-      if (normalized.path === sourcePath) {
+      const relative = relativeSourcePath(sourcePath, normalized.path);
+      if (relative === "") {
         setToast("Нельзя исключить весь исходный каталог целиком.", "error");
         return false;
       }
-      const sourcePrefix = sourcePath === "/" ? "/" : `${sourcePath}/`;
-      if (sourcePath !== "/" && !normalized.path.startsWith(sourcePrefix)) {
+      if (relative === null) {
         setToast("Путь исключения должен находиться внутри исходного каталога.", "error");
         return false;
       }
@@ -6366,6 +6402,69 @@
       state.excludePathEntries = state.excludePathEntries.filter((_, itemIndex) => itemIndex !== index);
       renderExcludePathEntries();
       collectFormJob();
+    }
+
+    function downloadOverlaps(sourcePath, jobs, options = {}, annotations = []) {
+      const source = remotePathParts(sourcePath);
+      if (!source) return [];
+      const entries = options.exclude_paths || [];
+      const patterns = options.exclude || [];
+      const output = [];
+      const candidates = [...(jobs || [])];
+      (annotations || []).forEach((entry) => {
+        // Current editor jobs win over stale annotations after an upload is edited.
+        if (!entry?.cloud_path || candidates.some((job) => job.key === entry.job_key)) return;
+        candidates.push({ key: entry.job_key, title: entry.title, enabled: entry.enabled,
+          kind: "backup", destination_path: entry.cloud_path });
+      });
+      candidates.forEach((job) => {
+        if (job.kind !== "backup" || job.transfer_direction === "download") return;
+        const destination = composeCloudDestination(job.cloud_key, job.destination_subpath) || job.destination_path;
+        const remote = remotePathParts(destination);
+        if (!remote || source.remote !== remote.remote) return;
+        const withinSource = relativeSourcePath(sourcePath, destination);
+        const sourceWithinUpload = relativeSourcePath(destination, sourcePath);
+        if (withinSource === null && sourceWithinUpload === null) return;
+        const wholeSource = withinSource === "" || (withinSource === null && sourceWithinUpload !== null);
+        const relative = wholeSource ? "" : withinSource;
+        const pattern = relative ? `/${relative.replace(/[\\*?\[\]{}]/g, (char) => `\\${char}`)}/**` : null;
+        const coveredByPath = entries.some((entry) => entry.kind !== "file"
+          && relativeSourcePath(entry.path, destination) !== null
+          && relativeSourcePath(sourcePath, entry.path) !== null);
+        const coveredByPattern = pattern && patterns.some((p) => [pattern, pattern.slice(1)].includes(p));
+        output.push({ job_key: job.key, title: job.display_title || job.title || job.description || job.key,
+          enabled: job.enabled !== false, cloud_path: destination, relative_path: relative,
+          exclude_pattern: pattern, covered: Boolean(coveredByPath || coveredByPattern), whole_source: wholeSource });
+      });
+      return output;
+    }
+
+    function renderDownloadOverlaps(job) {
+      const list = document.getElementById("downloadOverlapList");
+      if (!list || job.transfer_direction !== "download") return;
+      const savedJob = state.jobs.find((entry) => entry.key === state.editingKey);
+      const sameSource = savedJob?.source_path === job.source_path && savedJob?.cloud_key === job.cloud_key;
+      const annotations = job.download_overlaps || (sameSource ? savedJob.download_overlaps : []) || [];
+      const overlaps = downloadOverlaps(job.source_path, state.jobs, job.options, annotations);
+      state.downloadOverlapSuggestions = overlaps;
+      if (!job.cloud_key) {
+        list.innerHTML = '<div class="field-meta">Выберите облако и исходную папку для проверки пересечений.</div>';
+      } else if (!overlaps.length) {
+        list.innerHTML = '<div class="field-meta">Пересечений с папками загрузки других задач не найдено.</div>';
+      } else {
+        list.innerHTML = overlaps.map((entry, index) => `
+          <div class="exclude-path-item">
+            <div class="exclude-path-kind">${entry.covered ? "ИСКЛЮЧЕНО" : "ВНИМАНИЕ"}</div>
+            <div class="exclude-path-value">${escapeHtml(entry.title)}${entry.enabled ? "" : " (задача выключена)"}<br /><span class="field-meta">${escapeHtml(entry.cloud_path)}${entry.whole_source ? " • пересечение включает весь источник: выберите более узкую папку" : ""}</span></div>
+            <button type="button" class="secondary" onclick="addDownloadOverlapExclude(${index})" ${entry.covered || entry.whole_source ? "disabled" : ""}>${entry.covered ? "Добавлено" : "Исключить"}</button>
+          </div>`).join("");
+      }
+    }
+
+    function addDownloadOverlapExclude(index) {
+      const entry = state.downloadOverlapSuggestions?.[index];
+      if (!entry || entry.whole_source || entry.covered) return;
+      addExcludePathEntry(entry.cloud_path, "directory");
     }
 
     function collectJobRcloneOptions(kind = selectedJobKind()) {
@@ -6422,7 +6521,8 @@
     }
 
     function retentionPolicySupported() {
-      return selectedJobKind() === "backup" && selectedTransferMode() !== "sync";
+      return selectedJobKind() === "backup" && selectedTransferMode() !== "sync"
+        && document.getElementById("transferDirection")?.value !== "download";
     }
 
     function collectRetentionDirectoryScanSettings() {
@@ -6538,7 +6638,8 @@
     }
 
     function directoryScanSupported() {
-      return selectedJobKind() === "backup" && selectedTransferMode() === "copy" && !isTogglePressed("archiveEnabled");
+      return selectedJobKind() === "backup" && selectedTransferMode() === "copy" && !isTogglePressed("archiveEnabled")
+        && document.getElementById("transferDirection")?.value !== "download";
     }
 
     function collectDirectoryScanSettings() {
@@ -6600,7 +6701,7 @@
       });
       const warning = document.getElementById("directoryScanWarning");
       warning.hidden = supported;
-      warning.textContent = supported ? "" : "Недоступно для синхронизации, архивации и команд. Значения сохранены в редакторе; при сохранении задачи сканирование будет выключено.";
+      warning.textContent = supported ? "" : "Недоступно для скачивания, синхронизации, архивации и команд. Значения сохранены в редакторе; при сохранении задачи сканирование будет выключено.";
       const scan = collectDirectoryScanSettings();
       const error = directoryScanValidationError(scan);
       const preview = document.getElementById("directoryScanPreview");
@@ -6688,6 +6789,75 @@
     function selectedTransferMode() {
       const value = document.getElementById("jobKind").value;
       return value === "sync" ? "sync" : "copy";
+    }
+
+    function selectedTransferDirection() {
+      return document.getElementById("transferDirection")?.value === "download" ? "download" : "upload";
+    }
+
+    function transferDirectionLabel(job) {
+      return job?.transfer_direction === "download" ? "Облако → диск" : "Диск → облако";
+    }
+
+    function transferOperationLabel(item) {
+      if (item?.transfer_direction === "download") return "Скачивание";
+      const job = state.jobs?.find((entry) => entry.key === item?.job_key);
+      if (job?.transfer_direction === "download") return "Скачивание";
+      return item?.operation_label || item?.phase_label || "Копирование";
+    }
+
+    function remotePathParts(value) {
+      const match = /^([^/:\\]+):(.*)$/.exec(String(value || "").trim());
+      if (!match || match[2].includes("\\") || match[2].split("/").some((part) => part === "..")) return null;
+      return { remote: match[1], path: normalizePosixPath(`/${match[2]}`) || "/" };
+    }
+
+    function relativeSourcePath(source, candidate) {
+      const cloudSource = remotePathParts(source);
+      const cloudCandidate = remotePathParts(candidate);
+      if (cloudSource || cloudCandidate) {
+        if (!cloudSource || !cloudCandidate || cloudSource.remote !== cloudCandidate.remote) return null;
+        const prefix = cloudSource.path === "/" ? "/" : `${cloudSource.path}/`;
+        if (cloudCandidate.path === cloudSource.path) return "";
+        return cloudCandidate.path.startsWith(prefix) ? cloudCandidate.path.slice(prefix.length) : null;
+      }
+      const base = normalizePosixPath(source);
+      const path = normalizePosixPath(candidate);
+      if (!base.startsWith("/") || !path.startsWith("/")) return null;
+      if (path === base) return "";
+      const prefix = base === "/" ? "/" : `${base}/`;
+      return path.startsWith(prefix) ? path.slice(prefix.length) : null;
+    }
+
+    function cloudRelativeSubpath(cloudKey, remotePath) {
+      const root = composeCloudDestination(cloudKey, "");
+      return relativeSourcePath(root, remotePath);
+    }
+
+    function currentDownloadSource() {
+      return composeCloudDestination(formValue("jobCloud"), formValue("jobSourceSubpath"));
+    }
+
+    function updateTransferDirection() {
+      const next = selectedTransferDirection();
+      const previous = state.editorTransferDirection || "upload";
+      if (previous !== next) {
+        state.optionsByDirection = state.optionsByDirection || {};
+        state.optionsByDirection[previous] = collectJobRcloneOptions("backup");
+        // Age limits, filters and advanced arguments belong to their original
+        // direction. A fresh download must not inherit an upload's --max-age.
+        fillJobRcloneOptions(state.optionsByDirection[next] || {});
+        closeBrowser();
+      }
+      if (next === "download") {
+        if (previous !== "download") state.uploadTransferModeDraft = document.getElementById("jobKind").value;
+        if (selectedJobKind() !== "command") document.getElementById("jobKind").value = "copy";
+      } else if (previous === "download" && state.uploadTransferModeDraft && selectedJobKind() !== "command") {
+        document.getElementById("jobKind").value = state.uploadTransferModeDraft;
+      }
+      state.editorTransferDirection = next;
+      updateJobKindVisibility();
+      refreshAllCustomSelects();
     }
 
     function checkedWeekdays() {
@@ -6898,21 +7068,27 @@
       const title = formValue("jobTitle");
       const kind = selectedJobKind();
       const command = formValue("commandList").split("\n").map((item) => item.trim()).filter(Boolean);
+      const direction = kind === "backup" ? selectedTransferDirection() : "upload";
+      const download = direction === "download";
       const cloudKey = kind === "backup" ? formValue("jobCloud") || null : null;
-      const destinationSubpath = kind === "backup" ? (formValue("jobDestinationSubpath") || null) : null;
+      const sourceSubpath = download ? (formValue("jobSourceSubpath") || null) : null;
+      const destinationSubpath = kind === "backup" && !download ? (formValue("jobDestinationSubpath") || null) : null;
       const destinationPath = kind === "backup"
-        ? (composeCloudDestination(cloudKey, destinationSubpath) || formValue("jobDestination"))
+        ? (download ? formValue("jobDownloadDestination") : (composeCloudDestination(cloudKey, destinationSubpath) || formValue("jobDestination")))
         : null;
       const job = {
         key: formValue("jobKey"),
         title,
         description: title,
         kind,
-        source_path: kind === "backup" ? formValue("jobSource") : null,
+        transfer_direction: direction,
+        source_subpath: sourceSubpath,
+        source_path: kind === "backup" ? (download ? composeCloudDestination(cloudKey, sourceSubpath) : formValue("jobSource")) : null,
         cloud_key: cloudKey,
         destination_subpath: destinationSubpath,
         destination_path: destinationPath,
-        transfer_mode: kind === "backup" ? selectedTransferMode() : "copy",
+        destination_mount: download ? (formValue("jobDestinationMount") || null) : null,
+        transfer_mode: kind === "backup" && !download ? selectedTransferMode() : "copy",
         command,
         profile: document.getElementById("jobProfile").value,
         timeout_seconds: Number(document.getElementById("jobTimeout").value || 1800),
@@ -6946,8 +7122,16 @@
           stale_days: kind === "backup" ? Number(formValue("transferMonitorDays") || 2) : 2,
           priority: kind === "backup" && formValue("transferMonitorPriority") ? Number(formValue("transferMonitorPriority")) : null,
         },
-        watcher_enabled: kind === "backup" ? isTogglePressed("jobWatcherEnabled") : false,
+        watcher_enabled: kind === "backup" && !download ? isTogglePressed("jobWatcherEnabled") : false,
       };
+      if (download) {
+        job.retention = { ...job.retention, enabled: false, directory_scan: { ...job.retention.directory_scan, enabled: false } };
+        job.archive = { ...job.archive, enabled: false };
+        job.directory_scan = { ...job.directory_scan, enabled: false };
+      }
+      const downloadPreview = document.getElementById("jobDownloadSourcePreview");
+      if (downloadPreview) downloadPreview.value = download ? job.source_path || "" : "";
+      renderDownloadOverlaps(job);
       const destinationPreview = document.getElementById("jobDestinationPreview");
       if (destinationPreview) destinationPreview.value = destinationPath || "";
       renderMailruOptionsHint(job);
@@ -7002,11 +7186,20 @@
       document.getElementById("jobKey").value = job?.key || "";
       document.getElementById("jobTitle").value = job?.title || "";
       state.keyEditedManually = Boolean(job?.key);
-      document.getElementById("jobSource").value = job?.source_path || "";
-      renderJobCloudOptions(job?.cloud_key || "");
-      document.getElementById("jobDestinationSubpath").value = job?.destination_subpath || "";
-      document.getElementById("jobDestination").value = job?.destination_path || "";
-      document.getElementById("jobDestinationPreview").value = job?.destination_path || "";
+      const download = job?.transfer_direction === "download";
+      document.getElementById("transferDirection").value = download ? "download" : "upload";
+      state.editorTransferDirection = download ? "download" : "upload";
+      state.uploadTransferModeDraft = download ? "copy" : document.getElementById("jobKind").value;
+      state.optionsByDirection = {};
+      document.getElementById("jobSource").value = download ? "" : job?.source_path || "";
+      renderJobCloudOptions(job?.cloud_key || (download ? inferCloudByDestination(job?.source_path)?.key : "") || "");
+      document.getElementById("jobSourceSubpath").value = download ? (job?.source_subpath ?? cloudRelativeSubpath(formValue("jobCloud"), job?.source_path) ?? "") : "";
+      document.getElementById("jobDownloadSourcePreview").value = download ? job?.source_path || "" : "";
+      document.getElementById("jobDownloadDestination").value = download ? job?.destination_path || "" : "";
+      document.getElementById("jobDestinationMount").value = download ? job?.destination_mount || "" : "";
+      document.getElementById("jobDestinationSubpath").value = download ? "" : job?.destination_subpath || "";
+      document.getElementById("jobDestination").value = download ? "" : job?.destination_path || "";
+      document.getElementById("jobDestinationPreview").value = download ? "" : job?.destination_path || "";
       document.getElementById("commandList").value = (job?.command || []).join("\n");
       renderQueueOptions(job?.profile || getDefaultQueueKey());
       document.getElementById("jobTimeout").value = job?.timeout_seconds || 1800;
@@ -7151,7 +7344,25 @@
       }
     }
 
+    function downloadValidationError(job) {
+      if (job.transfer_direction !== "download") return "";
+      if (job.kind !== "backup" || job.transfer_mode !== "copy") return "Скачивание доступно только для копирования (copy).";
+      if (!job.cloud_key || !remotePathParts(job.source_path)) return "Выберите облако-источник и папку внутри него.";
+      const subpath = String(job.source_subpath || "");
+      if (subpath.startsWith("/") || subpath.includes("\\") || subpath.split("/").some((part) => part === "..")) return "Путь источника должен быть относительным к корню облака, без .. и обратных слешей.";
+      const destination = String(job.destination_path || "");
+      if (!destination.startsWith("/") || destination.includes("\\") || destination.split("/").some((part) => part === "..")) return "Каталог назначения на диске должен быть абсолютным, без .. и обратных слешей.";
+      const mount = String(job.destination_mount || "");
+      if (mount && (!mount.startsWith("/") || mount.includes("\\") || mount.split("/").some((part) => part === "..") || relativeSourcePath(mount, destination) === null)) return "Назначение должно находиться внутри абсолютной точки монтирования.";
+      if (job.retention?.enabled || job.archive?.enabled || job.watcher_enabled || job.directory_scan?.enabled) return "Для скачивания отключите очистку облака, архивацию, watcher и обход каталогов по датам.";
+      return "";
+    }
+
     function validateJob(job) {
+      if (job.transfer_direction === "download") {
+        const error = downloadValidationError(job);
+        if (error) throw new Error(error);
+      }
       if (job.directory_scan?.enabled) {
         const scanError = directoryScanValidationError(job.directory_scan);
         if (scanError) throw new Error(scanError);
@@ -7165,16 +7376,16 @@
         throw new Error(`Для задачи ${job.key} выбрана несуществующая или выключенная очередь`);
       }
       if (job.kind === "backup") {
-        if (!job.source_path.startsWith("/")) throw new Error("Source должен быть абсолютным каталогом");
+        if (job.transfer_direction !== "download" && !job.source_path.startsWith("/")) throw new Error("Исходный каталог на диске должен быть абсолютным");
         const excludePathPatterns = buildExcludePathPatterns(job.source_path, job.options?.exclude_paths || []);
         const excludePathEntries = Array.isArray(job.options?.exclude_paths) ? job.options.exclude_paths : [];
         if (excludePathPatterns.length !== excludePathEntries.length) {
           throw new Error("Все path-исключения должны быть внутри исходного каталога и не совпадать с ним целиком");
         }
-        if (job.cloud_key) {
-          if (!job.destination_path.includes(":")) throw new Error("Для выбранного облака нужен remote_name");
+        if (job.transfer_direction !== "download") {
+          if (job.cloud_key && !job.destination_path.includes(":")) throw new Error("Для выбранного облака нужен remote_name");
+          if (!job.destination_path.includes(":")) throw new Error("Назначение должно быть путём rclone в облаке");
         }
-        if (!job.destination_path.includes(":")) throw new Error("Destination должен быть rclone remote path");
         if (job.retention?.enabled && !job.retention?.min_age) {
           throw new Error("Для очистки в облаке нужно указать возраст, например 30d");
         }
@@ -7733,7 +7944,8 @@
 
     function updateJobKindVisibility(collect = true) {
       const kind = selectedJobKind();
-      const showRetention = kind === "backup" && selectedTransferMode() !== "sync";
+      const download = kind === "backup" && selectedTransferDirection() === "download";
+      const showRetention = kind === "backup" && selectedTransferMode() !== "sync" && !download;
       const usingCloud = kind === "backup" && Boolean(formValue("jobCloud"));
       document.querySelectorAll("[data-job-kind='backup']").forEach((node) => {
         node.style.display = kind === "backup" ? "" : "none";
@@ -7747,8 +7959,28 @@
       document.querySelectorAll("[data-cloud-mode='manual']").forEach((node) => {
         node.style.display = usingCloud ? "none" : "";
       });
+      document.querySelectorAll("[data-transfer-direction]").forEach((node) => {
+        const matchesDirection = node.dataset.transferDirection === (download ? "download" : "upload");
+        if (kind !== "backup" || !matchesDirection) node.style.display = "none";
+        else if (!node.dataset.cloudMode) node.style.display = "";
+      });
       document.querySelectorAll("[data-retention-block='true']").forEach((node) => {
         node.style.display = showRetention ? "" : "none";
+      });
+      const syncOption = document.querySelector('#jobKind option[value="sync"]');
+      if (syncOption) syncOption.disabled = download;
+      if (download && selectedTransferMode() === "sync") document.getElementById("jobKind").value = "copy";
+      document.getElementById("jobCloudLabel").textContent = download ? "Облако-источник" : "Облако назначения";
+      document.getElementById("transferDirectionHint").textContent = download
+        ? "Скачивание сохраняет файлы в исходной структуре. Только copy: файлы в облаке и лишние файлы на диске не удаляются. Архивация, sync, watcher и очистка облака отключены."
+        : "Исходный каталог на диске копируется или синхронизируется с выбранным облаком.";
+      document.getElementById("excludePathHelp").textContent = download
+        ? "Выбирайте папки или файлы внутри облачного источника. Путь вида mail:/MYSPACE/BACKUPS будет исключён из скачивания. Можно также задать exclude patterns вручную."
+        : "Можно добавить каталог или файл внутри исходного каталога. Для каталога будет исключено всё содержимое.";
+      document.getElementById("excludePathInput").placeholder = download ? "mail:/MYSPACE/BACKUPS/Proxmox" : "/media/photo/library/cache/";
+      document.getElementById("jobWatcherEnabled").disabled = download;
+      document.querySelectorAll('[id^="archive"]').forEach((node) => {
+        if (["INPUT", "BUTTON", "SELECT"].includes(node.tagName)) node.disabled = download;
       });
       renderMailruOptionsHint();
       updateDirectoryScanUI();
@@ -7761,9 +7993,25 @@
       }
     }
 
+    function browserUsesCloud() {
+      return ["cloud", "cloudSource"].includes(state.browseTarget)
+        || (state.browseTarget === "exclude" && selectedTransferDirection() === "download");
+    }
+
+    function browserSourceSubpath() {
+      return formValue("jobSourceSubpath").replace(/^\/+|\/+$/g, "");
+    }
+
+    function browserCloudPathAllowed(path) {
+      if (state.browseTarget !== "exclude" || selectedTransferDirection() !== "download") return true;
+      const base = browserSourceSubpath();
+      const normalized = String(path || "").replace(/^\/+|\/+$/g, "");
+      return !base || normalized === base || normalized.startsWith(`${base}/`);
+    }
+
     function updateBrowseChrome() {
       const excludeMode = state.browseTarget === "exclude";
-      const cloudMode = state.browseTarget === "cloud";
+      const cloudMode = browserUsesCloud();
       document.getElementById("browseTitle").textContent = excludeMode
         ? "Выбор исключения"
         : cloudMode
@@ -7782,11 +8030,12 @@
     }
 
     async function openBrowser(target) {
-      if (target === "exclude" && !formValue("jobSource")) {
+      const download = selectedTransferDirection() === "download";
+      if (target === "exclude" && !(download ? currentDownloadSource() : formValue("jobSource"))) {
         setToast("Сначала укажите исходный каталог задачи.", "error");
         return;
       }
-      if (target === "cloud" && !formValue("jobCloud")) {
+      if ((["cloud", "cloudSource"].includes(target) || (target === "exclude" && download)) && !formValue("jobCloud")) {
         setToast("Сначала выберите облако.", "error");
         return;
       }
@@ -7794,7 +8043,12 @@
       updateBrowseChrome();
       document.getElementById("browseModal").hidden = false;
       document.body.style.overflow = "hidden";
-      await browse(target === "exclude" ? formValue("jobSource") : (target === "cloud" ? formValue("jobDestinationSubpath") : null));
+      const initial = target === "exclude" ? (download ? browserSourceSubpath() : formValue("jobSource"))
+        : target === "cloud" ? formValue("jobDestinationSubpath")
+        : target === "cloudSource" ? browserSourceSubpath()
+        : target === "destination" ? formValue("jobDownloadDestination")
+        : target === "destinationMount" ? formValue("jobDestinationMount") : formValue("jobSource") || null;
+      await browse(initial);
       document.getElementById("browsePanel").focus();
     }
 
@@ -7810,13 +8064,13 @@
     }
 
     function browseUp() {
-      if (state.browseParent) {
+      if (state.browseParent !== null && state.browseParent !== undefined) {
         browse(state.browseParent);
       }
     }
 
     function chooseCurrentDirectory() {
-      if (state.browseCurrentPath || state.browseTarget === "cloud") {
+      if (state.browseCurrentPath || browserUsesCloud()) {
         selectBrowseEntry({ path: state.browseCurrentPath || "", type: "directory" });
       }
     }
@@ -7884,7 +8138,8 @@
     async function browse(path) {
       try {
         const includeFiles = state.browseTarget === "exclude";
-        const cloudMode = state.browseTarget === "cloud";
+        const cloudMode = browserUsesCloud();
+        if (cloudMode && !browserCloudPathAllowed(path)) throw new Error("Выбор исключений ограничен исходной папкой облака.");
         const query = new URLSearchParams();
         if (cloudMode) query.set("cloud_key", formValue("jobCloud"));
         if (path) query.set("path", path);
@@ -7896,19 +8151,21 @@
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || "browse failed");
         state.browseCurrentPath = payload.path || "";
-        state.browseParent = payload.parent || null;
+        const parent = payload.parent === null || payload.parent === undefined ? null : payload.parent;
+        state.browseParent = parent !== null && (!cloudMode || browserCloudPathAllowed(parent)) ? parent : null;
         document.getElementById("browsePath").textContent = payload.path || (cloudMode ? payload.remote_path || "Корень облака" : "Корневые директории");
         const entries = [];
-        if (payload.parent) {
+        if (state.browseParent !== null) {
           entries.push({
             type: "parent",
-            path: payload.parent,
+            path: state.browseParent,
             label: "..",
             kind: "родитель",
             hint: "шаг назад",
           });
         }
         (payload.directories || []).forEach((dir) => {
+          if (cloudMode && !browserCloudPathAllowed(dir.path)) return;
           entries.push({
             type: "directory",
             path: dir.path,
@@ -7918,6 +8175,7 @@
           });
         });
         (payload.files || []).forEach((file) => {
+          if (cloudMode && !browserCloudPathAllowed(file.path)) return;
           entries.push({
             type: "file",
             path: file.path,
@@ -7928,7 +8186,7 @@
         });
         state.browseEntries = entries;
         state.browseSelectedIndex = 0;
-        document.getElementById("browseUpButton").disabled = !payload.parent;
+        document.getElementById("browseUpButton").disabled = state.browseParent === null;
         document.getElementById("browseChooseButton").disabled = !state.browseCurrentPath && !cloudMode;
         renderBrowseList();
       } catch (error) {
@@ -7939,10 +8197,20 @@
     function selectBrowseEntry(entry) {
       if (state.browseTarget === "source") {
         document.getElementById("jobSource").value = entry.path.endsWith("/") ? entry.path : `${entry.path}/`;
-      } else if (state.browseTarget === "cloud") {
-        document.getElementById("jobDestinationSubpath").value = entry.path ? (entry.path.endsWith("/") ? entry.path : `${entry.path}/`) : "";
+      } else if (["cloud", "cloudSource"].includes(state.browseTarget)) {
+        const field = state.browseTarget === "cloudSource" ? "jobSourceSubpath" : "jobDestinationSubpath";
+        document.getElementById(field).value = entry.path ? (entry.path.endsWith("/") ? entry.path : `${entry.path}/`) : "";
+      } else if (state.browseTarget === "destination") {
+        document.getElementById("jobDownloadDestination").value = entry.path.endsWith("/") ? entry.path : `${entry.path}/`;
+      } else if (state.browseTarget === "destinationMount") {
+        document.getElementById("jobDestinationMount").value = entry.path;
       } else if (state.browseTarget === "exclude") {
-        if (!addExcludePathEntry(entry.path, entry.type === "file" ? "file" : "directory")) {
+        if (browserUsesCloud() && !browserCloudPathAllowed(entry.path)) {
+          setToast("Исключение должно находиться внутри облачного источника.", "error");
+          return;
+        }
+        const excludePath = browserUsesCloud() ? composeCloudDestination(formValue("jobCloud"), entry.path) : entry.path;
+        if (!addExcludePathEntry(excludePath, entry.type === "file" ? "file" : "directory")) {
           return;
         }
       }
@@ -7951,7 +8219,7 @@
       setToast(
         state.browseTarget === "exclude"
           ? `Добавлено исключение: ${entry.path}`
-          : state.browseTarget === "cloud"
+          : ["cloud", "cloudSource"].includes(state.browseTarget)
             ? `Выбрана папка облака ${entry.path || "/"}`
             : `Выбран каталог ${entry.path}`,
         "ok"
@@ -8073,7 +8341,7 @@
       state.keyEditedManually = Boolean(event.target.value.trim());
     });
 
-    ["jobSource", "jobDestination", "jobDestinationSubpath", "maxAge", "minAge", "jobTransfers", "jobCheckers", "jobTpslimit", "jobTpslimitBurst", "jobRetries", "jobLowLevelRetries", "jobRetriesSleep", "excludeList", "extraArgs", "archiveFilenameTemplate", "archiveDateFormat", "archiveCompressionLevel", "archiveTempDir", "archivePassword", "retentionMinAge", "retentionTransfers", "retentionCheckers", "retentionTpslimit", "retentionTpslimitBurst", "retentionRetries", "retentionLowLevelRetries", "retentionRetriesSleep", "retentionExcludeList", "retentionExtraArgs", "transferMonitorDays", "transferMonitorPriority", "jobNotifyTitle", "commandList"].forEach((id) => {
+    ["jobSource", "jobDestination", "jobDestinationSubpath", "jobSourceSubpath", "jobDownloadDestination", "jobDestinationMount", "maxAge", "minAge", "jobTransfers", "jobCheckers", "jobTpslimit", "jobTpslimitBurst", "jobRetries", "jobLowLevelRetries", "jobRetriesSleep", "excludeList", "extraArgs", "archiveFilenameTemplate", "archiveDateFormat", "archiveCompressionLevel", "archiveTempDir", "archivePassword", "retentionMinAge", "retentionTransfers", "retentionCheckers", "retentionTpslimit", "retentionTpslimitBurst", "retentionRetries", "retentionLowLevelRetries", "retentionRetriesSleep", "retentionExcludeList", "retentionExtraArgs", "transferMonitorDays", "transferMonitorPriority", "jobNotifyTitle", "commandList"].forEach((id) => {
       document.getElementById(id).addEventListener("input", () => collectFormJob());
     });
     ["directoryScanPathTemplate", "directoryScanLookbackDays", "directoryScanTimezone", "directoryScanFullIntervalHours"].forEach((id) => {

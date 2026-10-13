@@ -10,7 +10,10 @@ from .domain import CloudSettings
 def _normalize_cloud_browse_path(path: str | None) -> str:
     if path is None:
         return ""
-    return "/".join(segment for segment in str(path).strip().strip("/").split("/") if segment and segment != ".")
+    raw = str(path).strip()
+    if any(ord(char) < 32 for char in raw) or "\\" in raw or ".." in raw.split("/"):
+        raise ValueError("cloud path must remain within the configured cloud root")
+    return "/".join(segment for segment in raw.strip("/").split("/") if segment and segment != ".")
 
 
 def _join_cloud_path(root_path: str | None, path: str | None) -> str:
@@ -35,11 +38,12 @@ def _parent_cloud_path(path: str) -> str | None:
     return parent
 
 
-def _browse_cloud_directories(cloud: CloudSettings, path: str | None = None) -> dict[str, Any]:
+def _browse_cloud_directories(cloud: CloudSettings, path: str | None = None, *, include_files: bool = False) -> dict[str, Any]:
     normalized_path = _normalize_cloud_browse_path(path)
     remote_path = _cloud_browse_remote_path(cloud, normalized_path)
+    command = ["rclone", "lsjson", *([] if include_files else ["--dirs-only"]), remote_path]
     completed = subprocess.run(
-        ["rclone", "lsjson", "--dirs-only", remote_path],
+        command,
         capture_output=True,
         text=True,
         check=False,
@@ -56,29 +60,31 @@ def _browse_cloud_directories(cloud: CloudSettings, path: str | None = None) -> 
         raise RuntimeError("rclone lsjson returned unexpected payload")
 
     directories: list[dict[str, str]] = []
+    files: list[dict[str, Any]] = []
     for item in raw_items:
-        if not isinstance(item, dict) or item.get("IsDir") is not True:
+        if not isinstance(item, dict) or (item.get("IsDir") is not True and not include_files):
             continue
         name = str(item.get("Name") or "").strip().strip("/")
         if not name:
             item_path = _normalize_cloud_browse_path(item.get("Path"))
             name = item_path.rsplit("/", 1)[-1] if item_path else ""
-        if not name:
+        if not name or name in {".", ".."} or "/" in name or "\\" in name or any(ord(c) < 32 for c in name):
             continue
         child_path = "/".join(segment for segment in [normalized_path, name] if segment)
-        directories.append(
-            {
-                "name": name,
-                "path": child_path,
-                "remote_path": _cloud_browse_remote_path(cloud, child_path),
-            }
-        )
+        entry = {"name": name, "path": child_path, "remote_path": _cloud_browse_remote_path(cloud, child_path)}
+        if item.get("IsDir") is True:
+            directories.append(entry)
+        elif include_files:
+            entry["size"] = item.get("Size")
+            files.append(entry)
 
     directories.sort(key=lambda item: item["name"].lower())
+    files.sort(key=lambda item: item["name"].lower())
     return {
         "cloud_key": cloud.key,
         "path": normalized_path,
         "parent": _parent_cloud_path(normalized_path),
         "remote_path": remote_path,
         "directories": directories,
+        "files": files,
     }

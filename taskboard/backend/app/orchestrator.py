@@ -23,6 +23,7 @@ from .domain import (
     path_is_within,
 )
 from .directory_scan import DirectoryScanPlan, build_scan_plan, state_key_for_job
+from .download_guard import validate_download_execution
 from .gotify import GotifyClient
 from .locks import file_lock
 from .rclone_metrics import (
@@ -520,7 +521,7 @@ class Orchestrator:
         ]
         matched: list[JobDefinition] = []
         for job in self.catalog.raw_jobs():
-            if job.kind != "backup" or not job.enabled or not job.watcher_enabled or not job.source_path:
+            if job.kind != "backup" or job.transfer_direction == "download" or not job.enabled or not job.watcher_enabled or not job.source_path:
                 continue
             if any(
                 path_is_within(job.source_path, candidate)
@@ -606,6 +607,8 @@ class Orchestrator:
                         command = self._bind_step_rclone_log(
                             command=selected_command, run_id=run_id, step_id=step_id, log_mode=log_mode,
                         )
+                        if step.get("step_kind") == "job":
+                            validate_download_execution(self.catalog.get_job(str(step.get("job_key", ""))), command)
                         timeout_seconds = int(step.get("timeout_seconds") or self.settings.default_timeout_seconds)
                         result = self.runner.run(
                             command=command, timeout_seconds=timeout_seconds,
@@ -797,6 +800,8 @@ class Orchestrator:
                     "started_at": step.get("started_at"),
                     "progress_updated_at": step.get("progress_updated_at"),
                     "transfer_mode": job.transfer_mode,
+                    "transfer_direction": job.transfer_direction,
+                    "operation_label": "Скачивание" if job.transfer_direction == "download" else "Копирование",
                     "source_path": job.source_path,
                     "destination_path": job.destination_path,
                     "percent": progress.get("percent"),
@@ -897,6 +902,7 @@ class Orchestrator:
             progress = step.get("progress") or {}
             phase_label = (("Копирование завершено • очистка облака" if copy_completed else "Очистка облака")
                            if is_retention else "Архивация и отправка" if job and job.archive.enabled
+                           else "Скачивание" if job and job.transfer_direction == "download"
                            else "Копирование" if job and job.kind == "backup" else "Выполнение команды")
             items.append(
                 {
@@ -906,6 +912,7 @@ class Orchestrator:
                     "title": title,
                     "step_kind": step.get("step_kind"),
                     "phase_label": phase_label,
+                    "transfer_direction": job.transfer_direction if job else None,
                     "copy_completed": copy_completed,
                     "retention_policy": progress.get("retention_policy") if is_retention else None,
                     "listed_count": progress.get("listed_count") if is_retention else None,
@@ -1001,8 +1008,8 @@ class Orchestrator:
             cloud = self.catalog.get_cloud(job.cloud_key)
             if cloud:
                 return cloud
-        destination_path = str(job.destination_path or "").strip()
-        remote_name = destination_path.split(":", 1)[0].strip() if ":" in destination_path else ""
+        cloud_path = str(job.source_path if job.transfer_direction == "download" else job.destination_path or "").strip()
+        remote_name = cloud_path.split(":", 1)[0].strip() if ":" in cloud_path else ""
         if not remote_name:
             return None
         for cloud in self.catalog.raw_clouds():
@@ -1133,6 +1140,7 @@ class Orchestrator:
             retention = job.retention.normalized()
             if (
                 job.kind == "backup"
+                and job.transfer_direction != "download"
                 and retention.enabled
                 and job.destination_path
             ):

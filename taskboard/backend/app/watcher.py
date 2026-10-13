@@ -116,7 +116,7 @@ class FilesystemWatcher:
         items: list[dict[str, Any]] = []
         watcher_enabled = self.catalog.watcher.enabled
         for job in self.catalog.raw_jobs():
-            if job.kind != "backup" or not job.enabled or not job.watcher_enabled or not job.source_path:
+            if job.kind != "backup" or job.transfer_direction == "download" or not job.enabled or not job.watcher_enabled or not job.source_path:
                 continue
             source_path = job.source_path.rstrip("/") or job.source_path
             exists = False

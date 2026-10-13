@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from fnmatch import fnmatchcase
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shlex
 import threading
@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 VALID_TRANSFER_MODES = {"copy", "sync"}
+VALID_TRANSFER_DIRECTIONS = {"upload", "download"}
 VALID_JOB_KINDS = {"backup", "command"}
 VALID_SCHEDULE_MODES = {"manual", "interval", "daily", "weekly"}
 VALID_EXCLUDE_PATH_KINDS = {"directory", "file"}
@@ -141,10 +142,52 @@ def _normalize_exclude_path_entry(raw: Any) -> ExcludePathEntry | None:
     return normalized if normalized.path else None
 
 
+def split_remote_path(value: str | None) -> tuple[str, str] | None:
+    """Split a named remote lexically; never resolve it as a local filesystem path."""
+    raw = str(value or "").strip()
+    if ":" not in raw or any(ord(char) < 32 or ord(char) == 127 for char in raw) or "\\" in raw:
+        return None
+    remote, path = raw.split(":", 1)
+    if not remote or remote.startswith("-") or not re.fullmatch(r"[\w .-]+", remote):
+        return None
+    # Reject Windows drive paths, on-the-fly/connection-string remotes and
+    # traversal. Spaces, Unicode and colons IN object names remain valid.
+    if len(remote) == 1 or any(part == ".." for part in path.split("/")):
+        return None
+    normalized = PurePosixPath("/" + path.lstrip("/")).as_posix()
+    return remote, normalized
+
+
+def _remote_exclude_path_patterns(entries: list[ExcludePathEntry], source: tuple[str, str]) -> list[str]:
+    remote, root = source
+    patterns: list[str] = []
+    for entry in entries:
+        normalized = entry.normalized()
+        target = split_remote_path(normalized.path)
+        if target is None or target[0] != remote:
+            raise ValueError("download exclude_paths must use the same named remote as source_path")
+        try:
+            relative = PurePosixPath(target[1]).relative_to(PurePosixPath(root)).as_posix()
+        except ValueError as exc:
+            raise ValueError("download exclude_paths must be inside source_path") from exc
+        if relative == ".":
+            raise ValueError("download exclude_paths cannot exclude the entire source root")
+        # Path entries are literal, not glob expressions. Anchor at source root
+        # so BACKUPS/Proxmox does not exclude another nested folder of that name.
+        literal = "".join("\\" + char if char in "*?[]{}" else char for char in relative)
+        pattern = f"/{literal}/**" if normalized.kind == "directory" else f"/{literal}"
+        if pattern not in patterns:
+            patterns.append(pattern)
+    return patterns
+
+
 def _exclude_path_patterns(entries: list[ExcludePathEntry], source_path: str | None) -> list[str]:
     base_path = str(source_path or "").strip()
     if not base_path:
         return []
+    remote_source = split_remote_path(base_path)
+    if remote_source is not None:
+        return _remote_exclude_path_patterns(entries, remote_source)
     try:
         source_root = Path(base_path).expanduser().resolve(strict=False)
     except OSError:
@@ -178,6 +221,17 @@ def _normalize_exclude_pattern(pattern: str) -> str:
 
 
 def _candidate_relative_paths(source_path: str | None, target_path: str | None) -> list[str]:
+    remote_source = split_remote_path(source_path)
+    remote_target = split_remote_path(target_path)
+    if remote_source is not None or remote_target is not None:
+        if not remote_source or not remote_target or remote_source[0] != remote_target[0]:
+            return []
+        try:
+            relative = PurePosixPath(remote_target[1]).relative_to(PurePosixPath(remote_source[1])).as_posix()
+        except ValueError:
+            return []
+        return list(dict.fromkeys([relative, relative.rsplit("/", 1)[-1]]))
+
     def normalize_for_pattern_match(path: str | None, *, resolve: bool) -> str | None:
         raw_path = str(path or "").strip()
         if not raw_path:
@@ -930,6 +984,34 @@ def _validate_directory_scan_args(extra_args: list[str]) -> None:
             raise ValueError("directory_scan conflicts with custom selection/deletion arguments; use structured options instead")
 
 
+def _normalize_local_download_path(value: str | None, field_name: str) -> str:
+    raw = str(value or "").strip()
+    if (not raw.startswith("/") or raw.startswith("//") or "\\" in raw
+            or ":" in raw or any(ord(char) < 32 or ord(char) == 127 for char in raw)
+            or any(part == ".." for part in raw.split("/"))):
+        raise ValueError(f"download {field_name} must be an absolute local path without traversal")
+    normalized = PurePosixPath(raw).as_posix()
+    if normalized == "/":
+        raise ValueError(f"download {field_name} cannot be the filesystem root")
+    return normalized
+
+
+def _validate_download_args(extra_args: list[str]) -> None:
+    # A download is a non-destructive copy. Local/remote deletion, moving,
+    # symlink traversal and config switches that could redefine the remote are
+    # deliberately not configurable through its advanced arguments.
+    forbidden = {"--remove-source-files", "--remove-source-dirs", "--rmdirs", "--purge",
+                 "--move", "--download", "--links", "--copy-links", "--copy-unsafe-links", "--config",
+                 "--backup-dir", "--suffix", "--suffix-keep-extension", "--immutable",
+                 "--filter", "--filter-from", "--include", "--include-from", "--exclude", "--exclude-from",
+                 "--exclude-if-present", "--files-from", "--files-from-raw", "--ignore-case",
+                 "--min-age", "--max-age"}
+    for token in _split_extra_args(extra_args):
+        flag = token.split("=", 1)[0]
+        if flag in forbidden or flag.startswith("--delete-") or flag in {"-L", "-l"} or token.startswith("-f"):
+            raise ValueError("download conflicts with custom selectors, deletion, moving, link or config arguments; use structured options")
+
+
 @dataclass(frozen=True)
 class JobDefinition:
     key: str
@@ -948,6 +1030,9 @@ class JobDefinition:
     destination_subpath: str | None = None
     destination_path: str | None = None
     transfer_mode: str = "copy"
+    transfer_direction: str = "upload"
+    source_subpath: str | None = None
+    destination_mount: str | None = None
     options: BackupOptions = field(default_factory=BackupOptions)
     retention: RetentionSettings = field(default_factory=RetentionSettings)
     archive: ArchiveSettings = field(default_factory=ArchiveSettings)
@@ -961,11 +1046,39 @@ class JobDefinition:
         kind = self.kind if self.kind in VALID_JOB_KINDS else "command"
         profile = (self.profile or "").strip() or "standard"
         transfer_mode = self.transfer_mode if self.transfer_mode in VALID_TRANSFER_MODES else "copy"
+        transfer_direction = str(self.transfer_direction or "upload").strip().lower()
+        if transfer_direction not in VALID_TRANSFER_DIRECTIONS:
+            raise ValueError("transfer_direction must be upload or download")
+        source_subpath = (self.source_subpath or "").strip() or None
+        destination_mount = (self.destination_mount or "").strip() or None
         source_path = (self.source_path or "").strip() or None
         cloud_key = (self.cloud_key or "").strip() or None
         destination_subpath = (self.destination_subpath or "").strip() or None
         destination_path = (self.destination_path or "").strip() or None
         command = [item for item in self.command if isinstance(item, str) and item.strip()]
+        if transfer_direction == "download":
+            if kind != "backup" or self.transfer_mode != "copy":
+                raise ValueError("download is supported only for backup copy jobs; sync can delete local files")
+            remote_source = split_remote_path(source_path)
+            if remote_source is None or not str(source_path).split(":", 1)[1].startswith("/"):
+                raise ValueError("download source_path must be a named remote:/absolute/path")
+            source_path = f"{remote_source[0]}:{remote_source[1]}"
+            if source_subpath is not None:
+                if (":" in source_subpath or "\\" in source_subpath
+                        or any(ord(char) < 32 or ord(char) == 127 for char in source_subpath)
+                        or any(part == ".." for part in source_subpath.split("/"))):
+                    raise ValueError("download source_subpath must be relative to the cloud root without traversal")
+                source_subpath = PurePosixPath("/" + source_subpath.lstrip("/")).as_posix().lstrip("/") or None
+            destination_path = _normalize_local_download_path(destination_path, "destination_path")
+            if destination_mount:
+                destination_mount = _normalize_local_download_path(destination_mount, "destination_mount")
+                try:
+                    PurePosixPath(destination_path).relative_to(PurePosixPath(destination_mount))
+                except ValueError as exc:
+                    raise ValueError("download destination_path must be within destination_mount") from exc
+            if self.archive.enabled or self.retention.enabled or self.watcher_enabled or self.directory_scan.enabled:
+                raise ValueError("download cannot enable archive, retention, watcher or date-directory scan")
+            _validate_download_args(self.options.extra_args)
         schedule = self.schedule.validate()
         options = self.options.normalized()
         retention = self.retention.normalized()
@@ -1019,6 +1132,9 @@ class JobDefinition:
             destination_subpath=destination_subpath,
             destination_path=destination_path,
             transfer_mode=transfer_mode,
+            transfer_direction=transfer_direction,
+            source_subpath=source_subpath,
+            destination_mount=destination_mount,
             options=options,
             retention=retention,
             archive=archive,
@@ -1034,6 +1150,7 @@ class JobDefinition:
         item["display_title"] = normalized.title or normalized.description
         item["schedule_summary"] = normalized.schedule.summary()
         item["command_preview"] = " ".join(normalized.command)
+        item["direction_label"] = "Скачивание из облака" if normalized.transfer_direction == "download" else "Загрузка в облако"
         return item
 
     @staticmethod

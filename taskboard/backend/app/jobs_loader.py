@@ -167,6 +167,9 @@ def job_to_storage_dict(job: JobDefinition) -> dict[str, Any]:
         item["destination_subpath"] = normalized.destination_subpath
         item["destination_path"] = normalized.destination_path
         item["transfer_mode"] = normalized.transfer_mode
+        item["transfer_direction"] = normalized.transfer_direction
+        item["source_subpath"] = normalized.source_subpath
+        item["destination_mount"] = normalized.destination_mount
         item["options"] = normalized.options.to_dict()
         item["retention"] = normalized.retention.to_dict()
         item["archive"] = normalized.archive.to_dict()
@@ -241,6 +244,9 @@ def _load_job(
             destination_subpath=_clean_optional_text(raw.get("destination_subpath")),
             destination_path=destination_path,
             transfer_mode=transfer_mode,
+            transfer_direction=str(raw.get("transfer_direction", "upload")),
+            source_subpath=_clean_optional_text(raw.get("source_subpath")),
+            destination_mount=_clean_optional_text(raw.get("destination_mount")),
             options=options,
             retention=_load_retention(raw.get("retention")),
             archive=_load_archive(raw.get("archive")),
@@ -686,7 +692,7 @@ def _migrate_retention_commands(jobs: list[JobDefinition]) -> tuple[list[JobDefi
     backup_index_by_key: dict[tuple[str, str, tuple[Any, ...]], int] = {}
 
     for index, job in enumerate(migrated_jobs):
-        if job.kind != "backup" or not job.destination_path:
+        if job.kind != "backup" or job.transfer_direction == "download" or not job.destination_path:
             continue
         backup_index_by_key[_retention_match_key(job)] = index
 
@@ -726,6 +732,9 @@ def _migrate_retention_commands(jobs: list[JobDefinition]) -> tuple[list[JobDefi
             destination_subpath=backup.destination_subpath,
             destination_path=backup.destination_path,
             transfer_mode=backup.transfer_mode,
+            transfer_direction=backup.transfer_direction,
+            source_subpath=backup.source_subpath,
+            destination_mount=backup.destination_mount,
             options=backup.options,
             retention=RetentionSettings(
                 enabled=job.enabled,
